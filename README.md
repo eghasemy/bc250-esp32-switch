@@ -69,7 +69,7 @@ not reliable while WiFi is active.
                +3.3V ─┤  1 │ 13 ├─ +3.3V
                +3.3V ─┤  2 │ 14 ├─ −12V
                  GND ─┤  3 │ 15 ├─ GND
-                 +5V ─┤  4 │ 16 ├─ PS_ON#   ◄── GPIO4  (green, open-drain, active LOW)
+                 +5V ─┤  4 │ 16 ├─ PS_ON#   ◄── connect to `PS_ON_PIN`
                  GND ─┤  5 │ 17 ├─ GND      ◄── ESP GND (any GND pin works)
                  +5V ─┤  6 │ 18 ├─ GND
                  GND ─┤  7 │ 19 ├─ GND
@@ -87,7 +87,7 @@ ESP 5V/VIN ◄── +5VSB ─┤  9 │ 21 ├─ +5V
     FRAME ─┤  3   4 ├─ SMB_CLK_MAIN
   PCIRST# ─┤  5   6 ├─ SMB_DATA_MAIN
      LAD3 ─┤  7   8 ├─ LAD2
-       3V ─┤  9  10 ├─ LAD1      ◄── pin 9 (3V) = board-on sense ──► GPIO3
+       3V ─┤  9  10 ├─ LAD1      ◄── pin 9 (3V) = board-on sense ──► `BOARD_SENSE`
      LAD0 ─┤ 11  12 ├─ GND
           ─┤     14 ├─ S_PWRDWN#
      3VSB ─┤ 15  16 ├─ SERIRQ#
@@ -96,7 +96,8 @@ ESP 5V/VIN ◄── +5VSB ─┤  9 │ 21 ├─ +5V
 
 Pin 9 is the only TPMS1 pin used: it reads ~3.3 V when the board is powered and 0 V when
 off. No ground wire is needed from this header — the ESP already shares ground with the
-board through the ATX connector.
+board through the ATX connector. Use the board-specific wiring table above to map
+`PS_ON_PIN` and `BOARD_SENSE` to actual GPIO numbers.
 
 ## Button controls
 
