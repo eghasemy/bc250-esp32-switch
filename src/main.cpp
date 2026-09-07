@@ -4,9 +4,9 @@
 #include "config.h"
 #include "portal.h"
 
-// The ESP32-C3 is permanently powered from the ATX connector (5VSB), so it runs
-// independently of the PSU's main rails. It controls the SFX PSU through PS_ON#
-// and watches the BC250's TPMS1 line to know whether the board itself is up.
+// The ESP32 module is permanently powered from the ATX connector (5VSB), so it
+// runs independently of the PSU's main rails. It controls the SFX PSU through
+// PS_ON# and watches the BC250's TPMS1 line to know whether the board is up.
 //
 // Control model
 // -------------
@@ -178,13 +178,13 @@ static bool debounce(bool raw, bool *stable, bool *lastRaw,
 }
 
 static void normalBegin() {
-  Serial.println("=== BC250 PSU controller ===");
+  Serial.printf("=== BC250 PSU controller (%s) ===\n", BC250_BOARD_NAME);
 
   // PS_ON# open-drain, released by default so the PSU stays off at boot.
   pinMode(PS_ON_PIN, OUTPUT_OPEN_DRAIN);
   digitalWrite(PS_ON_PIN, PS_ON_RELEASE);
 
-  // Switch: GPIO6 = local ground, GPIO5 = sensed input with pull-up.
+  // Switch: BUTTON_GND = local ground, BUTTON_SENSE = sensed input with pull-up.
   pinMode(BUTTON_GND, OUTPUT);
   digitalWrite(BUTTON_GND, LOW);
   pinMode(BUTTON_SENSE, INPUT_PULLUP);
@@ -214,11 +214,13 @@ static bool g_setupMode = false;
 
 void setup() {
   Serial.begin(115200);
-  // Give USB-CDC a moment to enumerate so early logs aren't lost.
+  // Give native USB-CDC targets a moment to enumerate so early logs aren't lost.
+#if BC250_NATIVE_USB_SERIAL
   unsigned long t0 = millis();
   while (!Serial && (millis() - t0) < 2000) {
     delay(10);
   }
+#endif
   Serial.println();
 
   loadConfig();
