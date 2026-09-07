@@ -2,31 +2,54 @@
 
 //*******  Pin definitions  ***************
 //
-// BC250 PSU controller wiring:
+// BC250 PSU controller wiring. The two supported board profiles keep the same
+// external behavior but use different GPIOs because the classic ESP32 and the
+// ESP32-C3 have different safe pin sets:
 //
-//   ESP32-C3                      External
-//   --------                      --------
-//   GPIO5  (BUTTON_SENSE)  <-----> momentary switch terminal A
-//   GPIO6  (BUTTON_GND)    <-----> momentary switch terminal B
-//   GPIO4  (PS_ON_PIN)     <-----> ATX PS_ON# (green wire, active LOW)
-//   GPIO3  (BOARD_SENSE)   <-----> BC250 TPMS1 pin 9 (3.3V = board on)
+//   * ESP32-WROOM-32:
+//       GPIO33 (BUTTON_SENSE)  <-----> momentary switch terminal A
+//       GPIO25 (BUTTON_GND)    <-----> momentary switch terminal B
+//       GPIO27 (PS_ON_PIN)     <-----> ATX PS_ON# (green wire, active LOW)
+//       GPIO34 (BOARD_SENSE)   <-----> BC250 TPMS1 pin 9 (3.3V = board on)
+//     BOARD_SENSE must stay on ADC1 because the setup portal uses WiFi/BLE and
+//     ADC2 readings are not reliable while WiFi is active on the original ESP32.
 //
-// The switch bridges GPIO5 and GPIO6. GPIO6 is driven LOW to act as a local
-// ground, and GPIO5 is read with an internal pull-up: pressed reads LOW.
+//   * ESP32-C3-DevKitM-1 (legacy):
+//       GPIO5  (BUTTON_SENSE)  <-----> momentary switch terminal A
+//       GPIO6  (BUTTON_GND)    <-----> momentary switch terminal B
+//       GPIO4  (PS_ON_PIN)     <-----> ATX PS_ON# (green wire, active LOW)
+//       GPIO3  (BOARD_SENSE)   <-----> BC250 TPMS1 pin 9 (3.3V = board on)
+
+#ifndef BC250_NATIVE_USB_SERIAL
+#define BC250_NATIVE_USB_SERIAL 0
+#endif
+
+#if defined(BC250_BOARD_ESP32_WROOM_32)
+const char *const BC250_BOARD_NAME = "ESP32-WROOM-32";
+const int BUTTON_SENSE = 33;
+const int BUTTON_GND   = 25;
+const int PS_ON_PIN    = 27;
+const int BOARD_SENSE  = 34;
+#define AP_TX_POWER WIFI_POWER_19_5dBm
+#elif defined(BC250_BOARD_ESP32_C3_DEVKITM_1)
+const char *const BC250_BOARD_NAME = "ESP32-C3-DevKitM-1";
 const int BUTTON_SENSE = 5;
 const int BUTTON_GND   = 6;
+const int PS_ON_PIN    = 4;
+const int BOARD_SENSE  = 3;
+#define AP_TX_POWER WIFI_POWER_8_5dBm
+#else
+#error "Unsupported BC250 board profile. Build one of the configured PlatformIO environments."
+#endif
+
+// The switch bridges BUTTON_SENSE and BUTTON_GND. BUTTON_GND is driven LOW to
+// act as a local ground, and BUTTON_SENSE is read with an internal pull-up:
+// pressed reads LOW.
 
 // ATX PS_ON# is active LOW and idles at ~5V (pulled up inside the PSU).
 // Driven as OPEN-DRAIN so we never push 3.3V against the PSU's 5V pull-up:
 //   LOW  -> sink to GND -> PSU on
 //   HIGH -> high-impedance -> PSU pull-up wins -> PSU off
-const int PS_ON_PIN = 4;
-
-// BC250 TPMS1 (pin 9): reads ~3.3V while the board is powered/booted, 0 when
-// off. In practice it's a higher-impedance source that settles near ~2.9V and
-// hovers close to the ESP's digital logic threshold, so digitalRead() flickers.
-// We read it as an ADC voltage with hysteresis instead (see thresholds below).
-const int BOARD_SENSE = 3;
 
 // Hysteresis thresholds for the analog board-sense reading. The gap between
 // them keeps a noisy signal sitting near the threshold from chattering:
@@ -80,11 +103,9 @@ const unsigned long HEARTBEAT_MS = 1000;
 // SoftAP name shown when the device is in setup mode (open network).
 const char *const AP_SSID = "BC250 Switch Setup";
 
-// WiFi TX power for the SoftAP. These ESP32-C3 mini boards have an RF/power
-// design flaw (arduino-esp32 #6551): at full power the AP emits no usable
-// beacons, so the portal is invisible. A low value fixes it. WIFI_POWER_8_5dBm
-// is confirmed working on this board.
-#define AP_TX_POWER WIFI_POWER_8_5dBm
+// WiFi TX power for the SoftAP. The ESP32-C3 mini profile needs reduced power
+// because of arduino-esp32 #6551; the ESP32-WROOM-32 profile keeps the normal
+// full-power setting.
 
 //*******  BLE wake  ***************
 
