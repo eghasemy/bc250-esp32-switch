@@ -190,7 +190,7 @@ static void normalBegin() {
   pinMode(BUTTON_SENSE, INPUT_PULLUP);
 
   // TPMS1 sense: read as ADC over the full 0-3.3V range.
-  analogSetPinAttenuation(BOARD_SENSE, ADC_11db);
+  analogSetAttenuation(ADC_11db);
 
   // Seed debounced states from the current levels.
   buttonStable = buttonLastRaw = (digitalRead(BUTTON_SENSE) == LOW);
