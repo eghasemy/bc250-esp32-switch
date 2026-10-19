@@ -277,10 +277,18 @@ void portalLoop() {
 
   // Button held in setup mode = escape back to normal mode (only useful once
   // configured; an unconfigured device just re-enters setup).
+  // Only armed after the button has been seen released: the hold that entered
+  // setup mode is usually still down at boot and must not count as an exit.
   static unsigned long pressStart = 0;
   static bool wasDown = false;
+  static bool armed = false;
   bool down = (digitalRead(BUTTON_SENSE) == LOW);
-  if (down && !wasDown) {
+  if (!down) {
+    armed = true;
+  }
+  if (!armed) {
+    // Ignore the entry hold until it is released.
+  } else if (down && !wasDown) {
     pressStart = millis();
   } else if (down && (millis() - pressStart) >= SETUP_HOLD_MS) {
     Serial.println("[PORTAL] button held, leaving setup mode");
