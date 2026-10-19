@@ -106,6 +106,7 @@ board through the ATX connector. Use the board-specific wiring table above to ma
 | Tap while **off** | Power on |
 | Hold ≥ 5 s while **on** | Force power off |
 | Hold ≥ 8 s while **off** | Enter WiFi setup portal |
+| Release, then hold ≥ 8 s in **setup mode** | Leave the portal without changes |
 
 The button is the primary control and always works, even with no controller configured.
 
@@ -118,12 +119,16 @@ turn the controller off within that window to keep the machine down.
 
 ## Setup portal
 
-Hold the button ≥ 8 s while off (or on first use) to start the portal:
+Hold the button ≥ 8 s while off to start the portal. It never starts on its own, even on
+first use — without a bound controller the button still works as a plain power switch.
 
 1. Connect to the open WiFi network **`BC250 Switch Setup`** and open `http://192.168.4.1`.
 2. Create a password.
 3. Pick your controller from the live BLE scan (or enter its MAC).
 4. Finish — the device reboots into normal operation.
+
+To leave the portal without finishing, release the button and hold it ≥ 8 s again. The
+hold that entered setup mode doesn't count, however long you keep it down.
 
 ## Build & flash
 
