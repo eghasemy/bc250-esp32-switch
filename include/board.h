@@ -64,9 +64,19 @@ const int SENSE_LOW_MV  = 800;
 // board powers off the line floats near 0V but still throws the occasional spike
 // past SENSE_HIGH_MV. A single such spike flips the hysteresis HIGH for one loop,
 // which restarts the BOARD_OFF_DEBOUNCE_MS countdown -> shutdown detection stalls
-// for an unbounded, random time. Averaging this many samples per reading is a
-// low-pass that keeps a lone spike from ever crossing a threshold.
+// for an unbounded, random time. The spikes only ever push the reading UP (an
+// unconnected pin with WiFi on reads high in bursts lasting seconds), so each
+// reading takes the LOWEST of this many samples: one quiet sample shows the true
+// level, and a board that is really up reads high in every sample.
 const int SENSE_OVERSAMPLE = 16;
+
+// At boot, the board only counts as already running (and PS_ON# is asserted to
+// match) if TPMS1 reads high for this long without a break. A noise burst at
+// boot must not switch the PSU on.
+const unsigned long BOOT_ADOPT_MS = 2000;
+
+// While BOOTING, TPMS1 must read high this long before the board counts as up.
+const unsigned long BOARD_UP_DEBOUNCE_MS = 300;
 
 //*******  Logic levels  ***************
 
@@ -98,20 +108,46 @@ const unsigned long BOOT_TIMEOUT_MS = 10000;
 // Periodic heartbeat log interval.
 const unsigned long HEARTBEAT_MS = 1000;
 
-//*******  WiFi setup portal  ***************
+//*******  WiFi & web UI  ***************
 
-// SoftAP name shown when the device is in setup mode (open network).
+// SoftAP name, used both by the setup portal and as the fallback network when
+// the router can't be reached (open network; the web UI needs the password).
 const char *const AP_SSID = "BC250 Switch Setup";
+
+// Station hostname and mDNS name: the web UI is at http://bc250-switch.local.
+const char *const HOSTNAME = "bc250-switch";
 
 // WiFi TX power for the SoftAP. The ESP32-C3 mini profile needs reduced power
 // because of arduino-esp32 #6551; the ESP32-WROOM-32 profile keeps the normal
 // full-power setting.
 
+// Bring up the fallback AP when the router hasn't been reachable for this long.
+const unsigned long STA_FALLBACK_MS = 20000;
+
+// While the router is unreachable, retry joining it this often. Slower with the
+// fallback AP up, because each attempt scans channels and disturbs AP clients.
+const unsigned long STA_RETRY_MS          = 10000;
+const unsigned long STA_RETRY_FALLBACK_MS = 60000;
+
+// Web UI sessions expire after this long without a request.
+const unsigned long SESSION_IDLE_MS = 7UL * 24 * 3600 * 1000;
+
 //*******  BLE wake  ***************
 
-// The bound controller's BLE MAC is configured via the setup portal and stored
-// in NVS (see config.h: config.wakeAddr). When the machine is OFF and that
-// controller is advertising, we power on ("machine follows controller").
+// Up to MAX_CONTROLLERS controllers are bound via the web UI and stored in NVS
+// (see config.h). When the machine is OFF and any of them is advertising, we
+// power on ("machine follows controller").
+
+// Scan timing. WiFi is always up, so keep the duty cycle (window / interval)
+// low enough to leave the shared radio to WiFi. The wake scan is passive; the
+// discovery scan is active so device names arrive for the picker.
+const uint16_t WAKE_SCAN_INTERVAL_MS      = 320;
+const uint16_t WAKE_SCAN_WINDOW_MS        = 64;
+const uint16_t DISCOVERY_SCAN_INTERVAL_MS = 500;
+const uint16_t DISCOVERY_SCAN_WINDOW_MS   = 45;
+
+// How long a discovery scan started from the web UI runs.
+const unsigned long DISCOVERY_MS = 30000;
 
 // The controller counts as "present" while it has been seen within this window.
 // While OFF, presence => the machine powers on ("machine follows controller").

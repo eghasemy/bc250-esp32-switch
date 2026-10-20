@@ -1,8 +1,12 @@
 #include <Arduino.h>
-#include <NimBLEDevice.h>
+#include <WiFi.h>
 #include "board.h"
+#include "ble.h"
 #include "config.h"
-#include "portal.h"
+#include "log.h"
+#include "net.h"
+#include "power.h"
+#include "web.h"
 
 // The ESP32 module is permanently powered from the ATX connector (5VSB), so it
 // runs independently of the PSU's main rails. It controls the SFX PSU through
@@ -18,8 +22,10 @@
 //   * If the board shuts itself down (e.g. OS shutdown), TPMS1 drops to 0 while
 //     the PSU is still energized. We detect that and release PS_ON# so the PSU
 //     follows the board down.
-//   * A background BLE scan watches for the 8BitDo controller advertising; when
-//     it appears while we're OFF, that wakes the machine just like a button tap.
+//   * A background BLE scan watches for the bound controllers advertising; when
+//     one appears while we're OFF, that wakes the machine just like a button tap.
+//   * The web UI (web.cpp) runs alongside on the router network or the fallback
+//     AP, and can request power on / force off through power.h.
 
 enum PowerState {
   STATE_OFF,      // PSU released, board down
@@ -28,6 +34,7 @@ enum PowerState {
 };
 
 static PowerState state = STATE_OFF;
+static bool       g_setupMode = false;
 
 // --- Button debounce / press tracking ---
 static bool          buttonStable      = false;  // debounced "pressed" level
@@ -44,11 +51,18 @@ static bool          boardSenseLastRaw = false;
 static unsigned long boardSenseChange  = 0;
 
 // --- BLE wake ---
-// Written from the NimBLE scan task, read from loop(). 32-bit aligned scalars
-// are atomic on the ESP32, so a plain volatile is enough here.
-static volatile bool          bleSeenEver = false;
-static volatile unsigned long bleLastSeen = 0;
-static unsigned long          bleInhibitUntil = 0;  // wakes ignored until this
+static unsigned long bleInhibitUntil = 0;  // wakes ignored until this
+
+// --- Web requests (set from the web server task, consumed by loop()) ---
+static volatile bool powerOnRequested  = false;
+static volatile bool forceOffRequested = false;
+
+// --- Status snapshot for the web server task (written by loop()) ---
+static volatile PowerState    pubState      = STATE_OFF;
+static volatile bool          pubBoardUp    = false;
+static volatile uint32_t      pubSenseMv    = 0;
+static volatile bool          pubButtonDown = false;
+static volatile unsigned long pubInhibitMs  = 0;
 
 // --- Misc timers ---
 static unsigned long bootStart    = 0;
@@ -65,7 +79,7 @@ static const char *stateName(PowerState s) {
 
 static void setState(PowerState next) {
   if (next == state) return;
-  Serial.printf("[STATE] %s -> %s\n", stateName(state), stateName(next));
+  logEvent("[STATE] %s -> %s", stateName(state), stateName(next));
   state = next;
 }
 
@@ -74,14 +88,13 @@ static void setState(PowerState next) {
 static bool senseLevel = false;
 
 static bool readBoardSense(uint32_t *outMv = nullptr) {
-  // Average several reads to reject single-sample ADC/line spikes. Without this,
-  // one stray spike past SENSE_HIGH_MV chatters the hysteresis and restarts the
-  // board-off debounce, stalling shutdown detection (see SENSE_OVERSAMPLE).
-  uint32_t acc = 0;
+  // Take the lowest of several reads to reject upward ADC/line spikes. Without
+  // this, a stray spike past SENSE_HIGH_MV chatters the hysteresis and restarts
+  // the board-off debounce, stalling shutdown detection (see SENSE_OVERSAMPLE).
+  uint32_t mv = UINT32_MAX;
   for (int i = 0; i < SENSE_OVERSAMPLE; i++) {
-    acc += analogReadMilliVolts(BOARD_SENSE);
+    mv = min(mv, analogReadMilliVolts(BOARD_SENSE));
   }
-  uint32_t mv = acc / SENSE_OVERSAMPLE;
   if (outMv) *outMv = mv;
   if (senseLevel) {
     if (mv < SENSE_LOW_MV) senseLevel = false;
@@ -93,22 +106,23 @@ static bool readBoardSense(uint32_t *outMv = nullptr) {
 
 static void psuOn() {
   digitalWrite(PS_ON_PIN, PS_ON_ASSERT);
-  Serial.println("[PSU ] PS_ON# asserted (LOW) -> PSU ON");
+  logEvent("[PSU ] PS_ON# asserted (LOW) -> PSU ON");
 }
 
 static void psuOff() {
   digitalWrite(PS_ON_PIN, PS_ON_RELEASE);
-  Serial.println("[PSU ] PS_ON# released (high-Z) -> PSU OFF");
+  logEvent("[PSU ] PS_ON# released (high-Z) -> PSU OFF");
 }
 
-// Shared power-on path, used by both the button and the BLE wake. Takes the
-// loop's `now` rather than calling millis() itself: the BOOTING timeout compares
-// against the `now` cached at the top of normalLoop(), and a fresh millis() here
-// can land a millisecond past it. Since the comparison is unsigned, bootStart >
-// now makes (now - bootStart) underflow to a huge value and trip the timeout on
-// the very next loop. Sharing one clock per iteration keeps the math monotonic.
+// Shared power-on path, used by the button, the BLE wake and the web UI. Takes
+// the loop's `now` rather than calling millis() itself: the BOOTING timeout
+// compares against the `now` cached at the top of normalLoop(), and a fresh
+// millis() here can land a millisecond past it. Since the comparison is
+// unsigned, bootStart > now makes (now - bootStart) underflow to a huge value
+// and trip the timeout on the very next loop. Sharing one clock per iteration
+// keeps the math monotonic.
 static void powerOn(const char *reason, unsigned long now) {
-  Serial.printf("[ACT ] %s -> powering on\n", reason);
+  logEvent("[ACT ] %s -> powering on", reason);
   psuOn();
   bootStart = now;
   setState(STATE_BOOTING);
@@ -118,44 +132,15 @@ static void powerOn(const char *reason, unsigned long now) {
 // post-shutdown reconnect burst can't immediately wake us again. Takes `now` for
 // the same single-clock-per-loop reason as powerOn().
 static void powerOff(const char *reason, unsigned long now) {
-  Serial.printf("[ACT ] %s -> powering off\n", reason);
+  logEvent("[ACT ] %s -> powering off", reason);
   psuOff();
   bleInhibitUntil = now + BLE_WAKE_COOLDOWN_MS;
   setState(STATE_OFF);
 }
 
-// NimBLE scan task: just records that the target controller was seen. The wake
-// decision (edge-detect + state check) happens in loop(), off this task.
-class WakeScanCallbacks : public NimBLEScanCallbacks {
-  void onResult(const NimBLEAdvertisedDevice *dev) override {
-    if (dev->getAddress().toString() == config.wakeAddr.c_str()) {
-      bleLastSeen = millis();
-      bleSeenEver = true;
-    }
-  }
-};
-
-static WakeScanCallbacks wakeScanCallbacks;
-
-static void startBleScan() {
-  if (config.wakeAddr.isEmpty()) {
-    Serial.println("[BLE ] no controller bound; BLE wake disabled "
-                   "(hold button 8s while OFF to configure)");
-    return;
-  }
-  NimBLEDevice::init("");
-  NimBLEScan *scan = NimBLEDevice::getScan();
-  scan->setScanCallbacks(&wakeScanCallbacks, true);  // true = report duplicates
-  scan->setActiveScan(false);  // passive: we only need the address, saves power
-  scan->setInterval(160);      // ms
-  scan->setWindow(80);         // ms (<= interval; ~50% duty)
-  scan->start(0, false);       // 0 = scan continuously
-  Serial.printf("[BLE ] scanning for controller %s\n", config.wakeAddr.c_str());
-}
-
 // Persist a setup request and reboot into the WiFi portal.
 static void enterSetupMode(const char *reason) {
-  Serial.printf("[ACT ] %s -> entering setup mode\n", reason);
+  logEvent("[ACT ] %s -> entering setup mode", reason);
   setForceSetup(true);
   delay(50);
   ESP.restart();
@@ -177,6 +162,72 @@ static bool debounce(bool raw, bool *stable, bool *lastRaw,
   return false;
 }
 
+// --- power.h ---
+
+PowerStatus powerStatus() {
+  PowerStatus s;
+  PowerState st = pubState;
+  s.state         = g_setupMode ? "SETUP" : stateName(st);
+  s.psuOn         = !g_setupMode && st != STATE_OFF;
+  s.boardUp       = pubBoardUp;
+  s.senseMv       = pubSenseMv;
+  s.buttonDown    = pubButtonDown;
+  s.wakeInhibitMs = pubInhibitMs;
+  return s;
+}
+
+bool requestPowerOn() {
+  if (g_setupMode || pubState != STATE_OFF) return false;
+  powerOnRequested = true;
+  return true;
+}
+
+bool requestForceOff() {
+  if (g_setupMode || pubState == STATE_OFF) return false;
+  forceOffRequested = true;
+  return true;
+}
+
+// --- Setup mode ---
+
+static void setupBegin() {
+  Serial.println("=== BC250 PSU controller : SETUP MODE ===");
+
+  // Keep the PSU off and the button readable while configuring.
+  pinMode(PS_ON_PIN, OUTPUT_OPEN_DRAIN);
+  digitalWrite(PS_ON_PIN, PS_ON_RELEASE);
+  pinMode(BUTTON_GND, OUTPUT);
+  digitalWrite(BUTTON_GND, LOW);
+  pinMode(BUTTON_SENSE, INPUT_PULLUP);
+}
+
+static void setupLoop(unsigned long now) {
+  // Button held in setup mode = escape back to normal mode.
+  // Only armed after the button has been seen released: the hold that entered
+  // setup mode is usually still down at boot and must not count as an exit.
+  static unsigned long pressStart = 0;
+  static bool wasDown = false;
+  static bool armed = false;
+  bool down = (digitalRead(BUTTON_SENSE) == LOW);
+  pubButtonDown = down;
+  if (!down) {
+    armed = true;
+  }
+  if (!armed) {
+    // Ignore the entry hold until it is released.
+  } else if (down && !wasDown) {
+    pressStart = now;
+  } else if (down && (now - pressStart) >= SETUP_HOLD_MS) {
+    logEvent("[ACT ] button held, leaving setup mode");
+    setForceSetup(false);
+    delay(50);
+    ESP.restart();
+  }
+  wasDown = down;
+}
+
+// --- Normal mode ---
+
 static void normalBegin() {
   Serial.printf("=== BC250 PSU controller (%s) ===\n", BC250_BOARD_NAME);
 
@@ -192,9 +243,16 @@ static void normalBegin() {
   // TPMS1 sense: read as ADC over the full 0-3.3V range.
   analogSetAttenuation(ADC_11db);
 
-  // Seed debounced states from the current levels.
+  // Seed debounced states from the current levels. The board only counts as up
+  // if TPMS1 stays high for BOOT_ADOPT_MS (see there).
   buttonStable = buttonLastRaw = (digitalRead(BUTTON_SENSE) == LOW);
-  boardSenseStable = boardSenseLastRaw = readBoardSense();
+  bool boardUp = readBoardSense();
+  for (unsigned long t0 = millis(); boardUp && millis() - t0 < BOOT_ADOPT_MS;) {
+    delay(10);
+    boardUp = readBoardSense();
+  }
+  if (!boardUp) senseLevel = false;
+  boardSenseStable = boardSenseLastRaw = boardUp;
 
   // If the board is already up when the ESP (re)boots, adopt the ON state
   // rather than assuming OFF — keeps us in sync after an ESP-only reset.
@@ -203,42 +261,11 @@ static void normalBegin() {
     setState(STATE_ON);
   }
 
-  Serial.printf("[INIT] state=%s board=%s bound=%s\n",
-                stateName(state), boardSenseStable ? "UP" : "DOWN",
-                config.wakeAddr.isEmpty() ? "(none)" : config.wakeAddr.c_str());
-
-  startBleScan();
+  logEvent("[INIT] state=%s board=%s", stateName(state),
+           boardSenseStable ? "UP" : "DOWN");
 }
 
-static bool g_setupMode = false;
-
-void setup() {
-  Serial.begin(115200);
-  // Give native USB-CDC targets a moment to enumerate so early logs aren't lost.
-#if BC250_NATIVE_USB_SERIAL
-  unsigned long t0 = millis();
-  while (!Serial && (millis() - t0) < 2000) {
-    delay(10);
-  }
-#endif
-  Serial.println();
-
-  loadConfig();
-
-  // The portal only starts on an explicit request (8s button hold while OFF).
-  // Otherwise we ALWAYS run the normal controller so button control works even
-  // when no Bluetooth controller has been configured.
-  if (config.forceSetup) {
-    g_setupMode = true;
-    portalBegin();
-  } else {
-    normalBegin();
-  }
-}
-
-static void normalLoop() {
-  unsigned long now = millis();
-
+static void normalLoop(unsigned long now) {
   // --- Sample & debounce inputs ---
   uint32_t senseMv;
   bool buttonRaw = (digitalRead(BUTTON_SENSE) == LOW);   // pressed == LOW
@@ -252,12 +279,12 @@ static void normalLoop() {
       pressStartedOff = (state == STATE_OFF);
       longPressFired = false;
       setupFired = false;
-      Serial.println("[BTN ] pressed");
+      logEvent("[BTN ] pressed");
     } else {
       // Released. A short tap that began while OFF powers on (power-on is on
       // release so that a long hold from OFF can mean "enter setup" instead).
       unsigned long held = now - pressStart;
-      Serial.printf("[BTN ] released after %lu ms\n", held);
+      logEvent("[BTN ] released after %lu ms", held);
       if (pressStartedOff && !setupFired && state == STATE_OFF &&
           held < SETUP_HOLD_MS) {
         powerOn("short press while OFF", now);
@@ -279,13 +306,22 @@ static void normalLoop() {
     powerOff("long press (>5s) while ON", now);
   }
 
+  // --- Web UI requests ---
+  if (powerOnRequested) {
+    powerOnRequested = false;
+    if (state == STATE_OFF) powerOn("web UI power on", now);
+  }
+  if (forceOffRequested) {
+    forceOffRequested = false;
+    if (state != STATE_OFF) powerOff("web UI force off", now);
+  }
+
   // --- BLE controller wake ("machine follows controller") ---
-  // While OFF, the controller being present powers the machine on. The guard
-  // window after a power-off lets you switch the controller off first (so it
-  // goes absent and the machine stays down) and rides out the controller's
+  // While OFF, a bound controller being present powers the machine on. The
+  // guard window after a power-off lets you switch the controller off first (so
+  // it goes absent and the machine stays down) and rides out the controller's
   // reconnect-advertising burst at shutdown.
-  bool blePresent =
-      bleSeenEver && (now - bleLastSeen) < BLE_PRESENCE_TIMEOUT_MS;
+  bool blePresent = bleWakePresent(now);
   bool bleInhibited = (int32_t)(bleInhibitUntil - now) > 0;
   if (state == STATE_OFF && blePresent && !bleInhibited) {
     powerOn("controller present (BLE)", now);
@@ -293,14 +329,14 @@ static void normalLoop() {
 
   bool boardChanged = debounce(boardRaw, &boardSenseStable, &boardSenseLastRaw,
                                &boardSenseChange, now,
-                               state == STATE_BOOTING ? DEBOUNCE_MS
+                               state == STATE_BOOTING ? BOARD_UP_DEBOUNCE_MS
                                                       : BOARD_OFF_DEBOUNCE_MS);
 
   // --- State-driven board-sense handling ---
   switch (state) {
     case STATE_BOOTING:
       if (boardSenseStable) {
-        Serial.println("[ACT ] TPMS1 HIGH -> board is up");
+        logEvent("[ACT ] TPMS1 HIGH -> board is up");
         setState(STATE_ON);
       } else if ((now - bootStart) >= BOOT_TIMEOUT_MS) {
         powerOff("boot timed out, board never signalled UP", now);
@@ -319,22 +355,61 @@ static void normalLoop() {
       break;
   }
 
+  // --- Publish for the web UI ---
+  pubState      = state;
+  pubBoardUp    = boardSenseStable;
+  pubSenseMv    = senseMv;
+  pubButtonDown = buttonStable;
+  pubInhibitMs  = bleInhibited ? bleInhibitUntil - now : 0;
+
   // --- Heartbeat ---
   if (now - lastHeartbeat >= HEARTBEAT_MS) {
     lastHeartbeat = now;
-    Serial.printf("[HB  ] state=%s board=%s btn=%s ble=%s | sense: %umV (%s)\n",
+    Serial.printf("[HB  ] state=%s board=%s btn=%s ble=%s net=%s | sense: %umV (%s)\n",
                   stateName(state),
                   boardSenseStable ? "UP" : "DOWN",
                   buttonStable ? "down" : "up",
                   blePresent ? "present" : "absent",
+                  netSummary().c_str(),
                   senseMv, boardRaw ? "high" : "low");
   }
 }
 
-void loop() {
-  if (g_setupMode) {
-    portalLoop();
-    return;
+void setup() {
+  Serial.begin(115200);
+  // Give native USB-CDC targets a moment to enumerate so early logs aren't lost.
+#if BC250_NATIVE_USB_SERIAL
+  unsigned long t0 = millis();
+  while (!Serial && (millis() - t0) < 2000) {
+    delay(10);
   }
-  normalLoop();
+#endif
+  Serial.println();
+
+  loadConfig();
+
+  // The portal only starts on an explicit request (8s button hold while OFF).
+  // Otherwise we ALWAYS run the normal controller so button control works even
+  // when no Bluetooth controller or router has been configured.
+  g_setupMode = getForceSetup();
+  if (g_setupMode) {
+    setupBegin();
+  } else {
+    normalBegin();
+  }
+  bleBegin(g_setupMode);
+  netBegin(g_setupMode);
+  webBegin(g_setupMode);
+}
+
+void loop() {
+  unsigned long now = millis();
+  if (g_setupMode) {
+    setupLoop(now);
+  } else {
+    normalLoop(now);
+  }
+  bleLoop(now);
+  netLoop(now);
+  webLoop(now);
 }

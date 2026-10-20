@@ -2,134 +2,748 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BC250 Switch Setup</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#080d14" />
+  <title>BC250 Switch</title>
   <style>
-    :root { --bg:#121212; --card:#1e1e1e; --fg:#eee; --muted:#9e9e9e;
-            --accent:#ffd217; --accent2:#2c6bfd; --err:#ff5252; --ok:#4caf50; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family:ui-monospace,Menlo,Consolas,monospace;
-           background:var(--bg); color:var(--fg); min-height:100vh;
-           display:flex; justify-content:center; align-items:flex-start; }
-    .wrap { width:100%; max-width:480px; padding:24px 16px; }
-    h1 { color:var(--accent); font-size:20px; margin:8px 0 4px; }
-    .sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
-    .card { background:var(--card); border-radius:12px; padding:18px; margin-bottom:16px; }
-    label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
-    input { width:100%; padding:11px; border-radius:8px; border:1px solid #333;
-            background:#161616; color:var(--fg); font:inherit; font-size:15px; }
-    button { width:100%; padding:12px; margin-top:16px; border:none; border-radius:8px;
-             background:var(--accent); color:#000; font:inherit; font-weight:bold;
-             font-size:15px; cursor:pointer; }
+    :root {
+      color-scheme: dark;
+      --bg:#080d14; --surface:#101823; --surface-2:#151f2c; --field:#0b121b;
+      --line:#243244; --fg:#e8eef6; --muted:#8695a8;
+      --blue:#4c91ff; --blue-2:#2776ee; --green:#45d48a; --red:#ff6470; --amber:#f4b84a;
+      --radius:16px;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+    * { box-sizing:border-box; }
+    html { -webkit-text-size-adjust:100%; }
+    body { margin:0; min-height:100vh; font-family:var(--sans); color:var(--fg); font-size:14px;
+           background:radial-gradient(circle at 10% 0%, rgba(47,119,238,.16), transparent 32rem), var(--bg);
+           background-attachment:fixed; }
+    .wrap { max-width:1120px; margin:0 auto;
+            padding:20px max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left)); }
+    svg.i { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:2;
+            stroke-linecap:round; stroke-linejoin:round; }
+    .hidden { display:none !important; }
+    .muted { color:var(--muted); }
+    .mono { font-family:var(--mono); }
+
+    /* Header */
+    header { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+    .logo { width:48px; height:48px; border-radius:12px; display:grid; place-items:center; flex:none;
+             background:linear-gradient(160deg, #1d3b66, #13253f); color:#cfe0ff;
+             border:1px solid #2a4670; }
+    .logo svg.i { width:24px; height:24px; }
+    .title { flex:1; min-width:0; }
+    .title h1 { margin:0; font-size:20px; font-weight:700; letter-spacing:-.01em; }
+    .title div { color:var(--muted); font-size:13px; margin-top:2px;
+                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .live { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:13px; white-space:nowrap; }
+    .live i { width:8px; height:8px; border-radius:50%; background:var(--muted); }
+    .live.on i { background:var(--green); box-shadow:0 0 8px var(--green); }
+    .live.off i { background:var(--red); }
+
+    /* Summary tiles */
+    .tiles { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .tile { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+            padding:16px 18px; min-width:0; }
+    .tile.hero { background:linear-gradient(140deg, #16304f, var(--surface) 70%); }
+    .tile .k { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:11px;
+               font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+    .tile .k svg.i { width:15px; height:15px; }
+    .tile .v { margin-top:22px; display:flex; align-items:baseline; gap:8px; min-width:0; }
+    .tile .v b { font-size:22px; font-weight:700; white-space:nowrap; }
+    .tile .v span { color:var(--muted); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    /* Layout */
+    .grid { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(0,1fr); gap:16px; align-items:start; }
+    .col { display:flex; flex-direction:column; gap:16px; min-width:0; }
+    .span { grid-column:1 / -1; }
+
+    /* Cards */
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+            padding:20px; min-width:0; }
+    .card-h { display:flex; align-items:flex-start; gap:12px; }
+    .card-h .t { flex:1; min-width:0; }
+    .card-h h2 { margin:0; font-size:16px; font-weight:700; display:flex; align-items:center;
+                 gap:10px; flex-wrap:wrap; }
+    .card-h h2 svg.i { color:var(--blue); }
+    .card-h p { margin:6px 0 0; color:var(--muted); font-size:13px; }
+    .pill { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:999px;
+            padding:3px 11px; font-size:12px; font-weight:600; color:#c4cfdc; background:var(--surface-2);
+            white-space:nowrap; }
+    .pill.green { color:var(--green); border-color:#1f5a3d; background:#0f2a1f; }
+    .pill.amber { color:var(--amber); border-color:#5f4a1d; background:#2a2010; }
+    .pill.red { color:var(--red); border-color:#6a2830; background:#2a1216; }
+    .pill.blue { color:#9cc2ff; border-color:#284d84; background:#122340; }
+    hr { border:none; border-top:1px solid var(--line); margin:20px 0; }
+
+    /* Forms */
+    label { display:block; font-size:13px; font-weight:600; margin:16px 0 7px; }
+    .lab { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:16px 0 7px; }
+    .lab label { margin:0; }
+    input[type=text], input[type=password], input:not([type]) {
+      width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--line);
+      background:var(--field); color:var(--fg); font:inherit; font-size:15px; outline:none; }
+    input:focus { border-color:var(--blue-2); box-shadow:0 0 0 3px rgba(76,145,255,.18); }
+    input::placeholder { color:#5d6b7e; }
+    .check { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:13px; color:#c4cfdc; }
+    .check input { width:16px; height:16px; accent-color:var(--blue-2); }
+    .hint { color:var(--muted); font-size:12px; margin-top:10px; }
+    .msg { font-size:13px; margin-top:10px; min-height:18px; }
+    .msg.err { color:var(--red); } .msg.ok { color:var(--green); }
+    .msg:empty { display:none; }
+
+    button { font:inherit; cursor:pointer; border-radius:10px; font-weight:700; }
     button:disabled { opacity:.5; cursor:default; }
-    button.secondary { background:transparent; color:var(--accent2); border:1px solid var(--accent2); }
-    .msg { font-size:13px; margin-top:12px; min-height:18px; }
-    .msg.err { color:var(--err); } .msg.ok { color:var(--ok); }
-    .hidden { display:none; }
-    .dev { display:flex; align-items:center; gap:10px; padding:11px; border-radius:8px;
-           border:1px solid #333; margin-bottom:8px; cursor:pointer; background:#161616; }
-    .dev.sel { border-color:var(--accent); background:#2a2715; }
-    .dev .nm { flex:1; min-width:0; }
-    .dev .nm b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .dev .nm small { color:var(--muted); }
-    .dev .rssi { color:var(--muted); font-size:12px; white-space:nowrap; }
-    .row { display:flex; gap:10px; } .row > * { flex:1; }
-    .scanning { color:var(--muted); font-size:12px; margin:6px 0; }
+    .btn { border:none; padding:12px 20px; font-size:15px; color:#fff;
+           background:linear-gradient(180deg, var(--blue), var(--blue-2));
+           box-shadow:0 6px 18px rgba(39,118,238,.25); }
+    .btn.full { width:100%; margin-top:18px; }
+    .btn-2 { border:1px solid var(--line); background:var(--surface-2); color:var(--fg);
+             padding:8px 14px; font-size:13px; }
+    .btn-2.danger { color:var(--red); border-color:#6a2830; background:#2a1216; }
+    .btn-2.danger.armed { color:#fff; background:var(--red); border-color:var(--red); }
+    .linkbtn { background:none; border:none; color:var(--muted); padding:0; font-weight:500;
+               font-size:13px; text-decoration:underline; }
+
+    /* Power */
+    .power { display:flex; align-items:center; gap:16px; }
+    .power .t { flex:1; min-width:0; }
+    .pbtn { width:68px; height:68px; border-radius:50%; flex:none; display:grid; place-items:center;
+            border:1px solid #3f7fe0; color:#fff; padding:0;
+            background:radial-gradient(circle at 35% 30%, #4c91ff, #1d5fc4);
+            box-shadow:0 0 0 6px rgba(76,145,255,.08), 0 8px 26px rgba(39,118,238,.45); transition:all .2s; }
+    .pbtn svg.i { width:28px; height:28px; stroke-width:2.4; }
+    .pbtn.off { background:radial-gradient(circle at 35% 30%, #24364d, #16222f); border-color:var(--line);
+                color:var(--red); box-shadow:0 0 0 6px rgba(255,100,112,.06); }
+    .pbtn.armed { background:radial-gradient(circle at 35% 30%, #ff7d87, #d83a49); border-color:var(--red);
+                  color:#fff; box-shadow:0 0 0 6px rgba(255,100,112,.15), 0 8px 26px rgba(255,100,112,.4); }
+    .facts { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin-top:18px; }
+    .fact { background:var(--surface-2); border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-width:0; }
+    .fact div { color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .fact b { display:block; margin-top:4px; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    /* Lists */
+    .rows > div { display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--line); }
+    .rows > div:first-child { padding-top:4px; }
+    .rows .nm { flex:1; min-width:0; }
+    .rows .nm b { display:block; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rows .nm small { display:block; color:var(--muted); font-family:var(--mono); font-size:12px; margin-top:3px;
+                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rows .nm input { margin-top:2px; }
+    .rows .acts { display:flex; gap:8px; flex:none; align-items:center; }
+    .addrow { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; }
+    .addrow .btn { white-space:nowrap; }
+    .empty { border:1px dashed var(--line); border-radius:12px; padding:22px; text-align:center;
+             color:var(--muted); font-size:13px; margin-top:18px; }
+    .found { margin-top:14px; }
+    .rssi { color:var(--muted); font-size:12px; white-space:nowrap; text-align:right; font-family:var(--mono); }
+
+    /* Log */
+    .log { font-family:var(--mono); font-size:12px; line-height:1.65; max-height:300px; overflow-y:auto;
+           margin:16px -20px -20px; padding:14px 20px; border-top:1px solid var(--line); }
+    .log div { white-space:pre-wrap; word-break:break-word; }
+    .log span { color:var(--muted); }
+
+    .banner { border:1px solid #284d84; background:linear-gradient(140deg, #13284a, var(--surface) 75%);
+              border-radius:var(--radius); padding:18px 20px; margin-bottom:16px; }
+    .banner b { display:block; font-size:15px; margin-bottom:4px; }
+    .banner .btn { margin-top:14px; }
+
+    /* Sign-in */
+    .auth { max-width:420px; margin:12vh auto 0; }
+    .auth .logo { margin-bottom:18px; }
+    .auth h2 { margin:0 0 8px; font-size:22px; }
+
+    footer { text-align:center; color:var(--muted); font-size:12px; margin-top:22px; }
+
+    /* Tablet: settings move under the main column */
+    @media (max-width: 900px) {
+      .grid { grid-template-columns:minmax(0,1fr); }
+    }
+    /* Phone */
+    @media (max-width: 640px) {
+      .wrap { padding-top:16px; }
+      .tiles { grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+      .tile { padding:14px; }
+      .tile .v { margin-top:14px; flex-wrap:wrap; row-gap:0; }
+      .tile .v b { font-size:20px; }
+      .card { padding:18px 16px; }
+      .log { margin:16px -16px -18px; padding:12px 16px; }
+      .facts { grid-template-columns:repeat(2, minmax(0,1fr)); }
+      .addrow { grid-template-columns:minmax(0,1fr); }
+      .addrow .btn { width:100%; padding:13px; }
+      .rows > div { flex-wrap:wrap; }
+      .rows .acts { width:100%; justify-content:flex-end; }
+      .rows .found-row .acts, .rows .found-row { flex-wrap:nowrap; }
+      .rows .found-row .acts { width:auto; }
+      .title div { white-space:normal; }
+      .auth { margin-top:6vh; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>BC250 Switch</h1>
-    <div class="sub" id="subtitle">Setup portal</div>
+  <!-- Icons, drawn once and referenced with <use>. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.6a8 8 0 1 0 11.4 0"/></symbol>
+    <symbol id="i-pad" viewBox="0 0 24 24"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.4 3.6l.9 4.6a2.6 2.6 0 0 1-4.5 2.2L15.6 15H8.4l-1.7 2.4a2.6 2.6 0 0 1-4.5-2.2l.9-4.6A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 10v3M6.5 11.5h3"/><path d="M15.5 11h.01M17.5 12.5h.01"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 8.5a14 14 0 0 1 19 0"/><path d="M5.5 12a9.5 9.5 0 0 1 13 0"/><path d="M8.7 15.4a5 5 0 0 1 6.6 0"/><path d="M12 19h.01"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="m7 9.5 3 2.5-3 2.5M12.5 15H17"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+  </svg>
 
-    <!-- Password screen -->
-    <div class="card hidden" id="screen-pass">
-      <div id="pass-title" style="font-size:15px;font-weight:bold"></div>
+  <div class="wrap">
+    <!-- No password yet and not in setup mode -->
+    <div class="card auth hidden" id="screen-nopass">
+      <div class="logo"><svg class="i"><use href="#i-pad"/></svg></div>
+      <h2>Not set up yet</h2>
+      <div class="muted">
+        With the machine off, hold the power button for 8 seconds. The switch restarts into
+        setup mode: join the <b>BC250 Switch Setup</b> WiFi network and create a password there.
+      </div>
+    </div>
+
+    <!-- Create password / sign in -->
+    <div class="card auth hidden" id="screen-pass">
+      <div class="logo"><svg class="i"><use href="#i-pad"/></svg></div>
+      <h2 id="pass-title"></h2>
+      <div class="muted" id="pass-sub"></div>
       <label for="pw">Password</label>
-      <input id="pw" type="password" autocomplete="new-password" />
+      <input id="pw" type="password" autocomplete="current-password" />
       <div id="confirm-wrap">
         <label for="pw2">Confirm password</label>
         <input id="pw2" type="password" autocomplete="new-password" />
       </div>
-      <button id="pass-btn">Continue</button>
+      <button class="btn full" id="pass-btn">Continue</button>
       <div class="msg" id="pass-msg"></div>
     </div>
 
-    <!-- Device selection screen -->
-    <div class="card hidden" id="screen-dev">
-      <div style="font-size:15px;font-weight:bold">Select your controller</div>
-      <div class="sub" style="margin:6px 0 0">Turn the controller on so it appears below.</div>
-      <div class="scanning" id="scan-state">Scanning…</div>
-      <div id="dev-list"></div>
-      <label for="manual">Or enter a MAC manually</label>
-      <input id="manual" placeholder="aa:bb:cc:dd:ee:ff" />
-      <button id="save-btn" disabled>Bind controller &amp; finish</button>
-      <div class="msg" id="dev-msg"></div>
+    <!-- Dashboard -->
+    <div class="hidden" id="screen-main">
+      <header>
+        <div class="logo"><svg class="i"><use href="#i-pad"/></svg></div>
+        <div class="title">
+          <h1>BC250 Switch</h1>
+          <div>PSU power switch &amp; controller wake</div>
+        </div>
+        <div class="live" id="live"><i></i><span>Live</span></div>
+      </header>
+
+      <div class="banner hidden" id="setup-banner">
+        <b>Setup mode</b>
+        <div class="muted">The PSU stays off while you're here. Bind controllers and set the
+          router, then finish to return to normal operation.</div>
+        <button class="btn" id="finish-btn">Finish setup</button>
+        <div class="msg" id="finish-msg"></div>
+      </div>
+
+      <div class="tiles">
+        <div class="tile hero">
+          <div class="k"><svg class="i"><use href="#i-power"/></svg>System power</div>
+          <div class="v"><b id="t-power">–</b><span id="t-power-sub"></span></div>
+        </div>
+        <div class="tile">
+          <div class="k"><svg class="i"><use href="#i-pad"/></svg>Controllers</div>
+          <div class="v"><b id="t-ctl">–</b><span id="t-ctl-sub"></span></div>
+        </div>
+        <div class="tile">
+          <div class="k"><svg class="i"><use href="#i-wifi"/></svg>Network</div>
+          <div class="v"><b id="t-net">–</b><span id="t-net-sub"></span></div>
+        </div>
+        <div class="tile">
+          <div class="k"><svg class="i"><use href="#i-pulse"/></svg>Activity</div>
+          <div class="v"><b id="t-act">–</b><span id="t-act-sub"></span></div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="col">
+          <!-- Power -->
+          <div class="card" id="power-card">
+            <div class="power">
+              <div class="t card-h">
+                <div class="t">
+                  <h2><svg class="i"><use href="#i-power"/></svg>BC250 power
+                    <span class="pill" id="power-pill">–</span></h2>
+                  <p id="power-hint">Switches the PSU through PS_ON#</p>
+                </div>
+              </div>
+              <button class="pbtn" id="power-btn" aria-label="Power" disabled>
+                <svg class="i"><use href="#i-power"/></svg></button>
+            </div>
+            <div class="facts">
+              <div class="fact"><div>Board</div><b id="f-board">–</b></div>
+              <div class="fact"><div>TPMS1</div><b id="f-sense">–</b></div>
+              <div class="fact"><div>PSU</div><b id="f-psu">–</b></div>
+              <div class="fact"><div>Wake</div><b id="f-wake">–</b></div>
+            </div>
+            <div class="msg" id="power-msg"></div>
+          </div>
+
+          <!-- Bound controllers -->
+          <div class="card">
+            <div class="card-h">
+              <div class="t">
+                <h2><svg class="i"><use href="#i-pad"/></svg>Controllers</h2>
+                <p>Bluetooth controllers that turn the machine on</p>
+              </div>
+              <span class="pill" id="ctl-pill">–</span>
+            </div>
+            <div class="rows" id="ctl-list" style="margin-top:14px"></div>
+            <div class="empty hidden" id="ctl-empty">No controllers yet. The power button works on its own.</div>
+            <label for="manual">Add by Bluetooth address</label>
+            <div class="addrow">
+              <input id="manual" placeholder="aa:bb:cc:dd:ee:ff" autocapitalize="off" autocomplete="off" spellcheck="false" />
+              <input id="nick" maxlength="24" placeholder="Nickname (optional)" />
+              <button class="btn" id="add-btn">Add controller</button>
+            </div>
+            <div class="msg" id="add-msg"></div>
+            <div class="hint">A new controller starts waking the machine after it has been switched off once.</div>
+          </div>
+
+          <!-- Discovery -->
+          <div class="card">
+            <div class="card-h">
+              <div class="t">
+                <h2><svg class="i"><use href="#i-search"/></svg>Discover controllers
+                  <span class="pill" id="scan-pill">Idle</span></h2>
+                <p>Put the controller in Bluetooth pairing mode (not dongle mode) and keep it close</p>
+              </div>
+              <button class="btn" id="scan-btn">Scan</button>
+            </div>
+            <div class="empty" id="found-empty">Start a scan to find nearby controllers.</div>
+            <div class="rows found" id="found-list"></div>
+            <div class="msg" id="found-msg"></div>
+          </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="col">
+          <div class="card">
+            <div class="card-h">
+              <div class="t">
+                <h2><svg class="i"><use href="#i-wifi"/></svg>WiFi</h2>
+                <p id="wifi-state">–</p>
+              </div>
+            </div>
+            <div class="lab"><label for="ssid">2.4 GHz network name</label><span class="pill" id="wifi-pill">–</span></div>
+            <input id="ssid" autocapitalize="off" autocomplete="off" spellcheck="false" />
+            <label for="wpass">Network password</label>
+            <input id="wpass" type="password" autocomplete="new-password" />
+            <label class="check"><input type="checkbox" id="wopen" />Open network (clear saved password)</label>
+            <button class="btn full" id="wifi-btn">Save network settings</button>
+            <div class="msg" id="wifi-msg"></div>
+            <div class="hint">If the router can't be reached for 20 s, the switch brings up the
+              open <b>BC250 Switch Setup</b> network at 192.168.4.1 and keeps retrying.</div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">
+              <div class="t">
+                <h2><svg class="i"><use href="#i-lock"/></svg>Password</h2>
+                <p>Changing it signs out every other device</p>
+              </div>
+              <button class="linkbtn" id="logout">Sign out</button>
+            </div>
+            <label for="cur">Current password</label>
+            <input id="cur" type="password" autocomplete="current-password" />
+            <label for="np">New password</label>
+            <input id="np" type="password" autocomplete="new-password" placeholder="At least 6 characters" />
+            <label for="np2">Confirm new password</label>
+            <input id="np2" type="password" autocomplete="new-password" />
+            <button class="btn full" id="chpw-btn">Change password</button>
+            <div class="msg" id="chpw-msg"></div>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div class="card span">
+          <div class="card-h">
+            <div class="t">
+              <h2><svg class="i"><use href="#i-term"/></svg>Event log</h2>
+              <p>Last 40 events since the switch started</p>
+            </div>
+          </div>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+      <footer id="footer"></footer>
     </div>
   </div>
 
   <script>
-    let token = null;
-    let selected = null;
-    let pollTimer = null;
-
     const $ = (id) => document.getElementById(id);
+    const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/;
+
+    let token = null;
+    let info = null;
+    let status = null;
+    let timers = [];
+    let armedOff = 0;    // Force off needs a second tap within a few seconds
+    let lastOk = 0;      // time of the last successful status poll
+
+    function store(k, v) {
+      try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {}
+    }
+    function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 
     async function api(path, method = "GET", body = null) {
       const headers = {};
       if (body) headers["Content-Type"] = "application/json";
       if (token) headers["X-Auth-Token"] = token;
-      const res = await fetch(path, {
-        method, headers, body: body ? JSON.stringify(body) : undefined,
-      });
+      const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
       let data = {};
       try { data = await res.json(); } catch (e) { /* empty */ }
+      if (res.status === 401 && token && path !== "/api/password") {
+        signedOut();
+        throw new Error("signed out");
+      }
       if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
       return data;
     }
 
-    function show(screen) {
-      $("screen-pass").classList.toggle("hidden", screen !== "pass");
-      $("screen-dev").classList.toggle("hidden", screen !== "dev");
+    function setMsg(id, text, kind) {
+      const e = $(id);
+      e.className = "msg" + (kind ? " " + kind : "");
+      e.textContent = text || "";
     }
 
-    // --- Password screen ---
-    let creating = true;
-    function initPassScreen(passwordSet) {
-      creating = !passwordSet;
-      $("pass-title").textContent = creating ? "Create a portal password" : "Enter portal password";
+    function setPill(id, text, color) {
+      const e = $(id);
+      e.textContent = text;
+      e.className = "pill" + (color ? " " + color : "");
+    }
+
+    function show(screen) {
+      for (const s of ["nopass", "pass", "main"]) $("screen-" + s).classList.toggle("hidden", s !== screen);
+    }
+
+    function ago(ms) {
+      const s = Math.max(0, Math.round(ms / 1000));
+      if (s < 60) return s + "s";
+      if (s < 3600) return Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s";
+      if (s < 86400) return Math.floor(s / 3600) + "h " + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m";
+      return Math.floor(s / 86400) + "d " + Math.floor(s % 86400 / 3600) + "h";
+    }
+
+    function el(tag, cls, text) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    // --- Sign in ---
+    let creating = false;
+    function showPassScreen() {
+      creating = !info.passwordSet;
+      $("pass-title").textContent = creating ? "Create a password" : "Welcome back";
+      $("pass-sub").textContent = creating
+        ? "It protects the web UI on your network. At least 6 characters."
+        : "Enter the password to open the BC250 Switch.";
       $("confirm-wrap").classList.toggle("hidden", !creating);
-      $("pass-btn").textContent = creating ? "Create & continue" : "Unlock";
+      $("pw").autocomplete = creating ? "new-password" : "current-password";
+      $("pass-btn").textContent = creating ? "Create & continue" : "Sign in";
       show("pass");
+      $("pw").focus();
     }
 
     $("pass-btn").onclick = async () => {
       const pw = $("pw").value;
-      const msg = $("pass-msg");
-      msg.className = "msg";
+      setMsg("pass-msg", "");
       if (creating) {
-        if (pw.length < 6) { msg.className = "msg err"; msg.textContent = "Min 6 characters."; return; }
-        if (pw !== $("pw2").value) { msg.className = "msg err"; msg.textContent = "Passwords don't match."; return; }
+        if (pw.length < 6) return setMsg("pass-msg", "At least 6 characters.", "err");
+        if (pw !== $("pw2").value) return setMsg("pass-msg", "Passwords don't match.", "err");
       }
       try {
         $("pass-btn").disabled = true;
-        const path = creating ? "/api/password" : "/api/login";
-        const data = await api(path, "POST", { password: pw });
+        const data = await api(creating ? "/api/password" : "/api/login", "POST", { password: pw });
         token = data.token;
-        gotoDeviceScreen();
+        store("bc250-token", token);
+        $("pw").value = $("pw2").value = "";
+        info.passwordSet = true;
+        startMain();
       } catch (e) {
-        msg.className = "msg err"; msg.textContent = e.message;
+        setMsg("pass-msg", e.message, "err");
       } finally {
         $("pass-btn").disabled = false;
       }
     };
+    $("pw").onkeydown = $("pw2").onkeydown = (e) => { if (e.key === "Enter") $("pass-btn").click(); };
 
-    // --- Device screen ---
-    function gotoDeviceScreen() {
-      show("dev");
-      pollDevices();
-      pollTimer = setInterval(pollDevices, 2000);
+    function signedOut() {
+      token = null;
+      store("bc250-token", null);
+      stopTimers();
+      showPassScreen();
     }
+
+    $("logout").onclick = async () => {
+      try { await api("/api/logout", "POST", {}); } catch (e) {}
+      signedOut();
+    };
+
+    // --- Dashboard ---
+    function stopTimers() { timers.forEach(clearInterval); timers = []; }
+
+    function startMain() {
+      show("main");
+      $("setup-banner").classList.toggle("hidden", info.mode !== "setup");
+      $("power-card").classList.toggle("hidden", info.mode === "setup");
+      $("footer").textContent = info.mode === "setup" ? "Setup mode · http://192.168.4.1" : "http://" + info.hostname + ".local";
+      stopTimers();
+      refresh(true);
+      pollLog();
+      timers.push(setInterval(refresh, 1500));
+      timers.push(setInterval(pollLog, 3000));
+      timers.push(setInterval(renderLive, 1000));
+    }
+
+    function renderLive() {
+      const live = $("live");
+      const fresh = Date.now() - lastOk < 5000;
+      live.className = "live " + (fresh ? "on" : "off");
+      live.querySelector("span").textContent = fresh ? "Live" : "Offline";
+    }
+
+    async function refresh(first) {
+      try {
+        status = await api("/api/status");
+        lastOk = Date.now();
+      } catch (e) {
+        renderLive();
+        return;
+      }
+      renderLive();
+      renderPower();
+      renderNet(first === true);
+      renderControllers();
+      renderTiles();
+      if (scanning || status.discovering) pollDevices();
+    }
+
+    function renderTiles() {
+      const p = status.power;
+      $("t-power").textContent = p.state === "BOOTING" ? "BOOT" : p.state;
+      $("t-power-sub").textContent = { OFF: "Idle", BOOTING: "Starting", ON: "Running", SETUP: "PSU held off" }[p.state] || "";
+
+      const on = status.controllers.filter((c) => c.present).length;
+      $("t-ctl").textContent = status.controllers.length;
+      $("t-ctl-sub").textContent = on ? on + " on now" : "bound";
+
+      const n = status.net;
+      if (n.mode === "setup") { $("t-net").textContent = "AP"; $("t-net-sub").textContent = n.apIp || ""; }
+      else if (n.staConnected) { $("t-net").textContent = "LAN"; $("t-net-sub").textContent = n.ip; }
+      else if (n.apActive) { $("t-net").textContent = "AP"; $("t-net-sub").textContent = n.apIp; }
+      else { $("t-net").textContent = "–"; $("t-net-sub").textContent = "connecting"; }
+
+      let act = "Idle";
+      if (status.discovering) act = "Scanning";
+      else if (p.state === "BOOTING") act = "Booting";
+      else if (p.wakeInhibitMs > 0) act = "Guard";
+      $("t-act").textContent = act;
+      $("t-act-sub").textContent = "Updated " + new Date().toLocaleTimeString();
+    }
+
+    function renderPower() {
+      const p = status.power;
+      const pill = { OFF: ["System off", ""], BOOTING: ["Booting", "amber"], ON: ["Running", "green"] }[p.state] || [p.state, "blue"];
+      setPill("power-pill", pill[0], pill[1]);
+      $("power-hint").textContent = {
+        OFF: "Tap to switch the PSU on. A bound controller or the case button also works.",
+        BOOTING: "PSU on, waiting for the board to come up (10 s limit).",
+        ON: "Running. Shut down from the OS when you can; the switch follows the board down.",
+      }[p.state] || "";
+      $("f-board").textContent = p.boardUp ? "Up" : "Down";
+      $("f-sense").textContent = p.senseMv + " mV";
+      $("f-psu").textContent = p.psuOn ? "On" : "Off";
+      $("f-wake").textContent = p.wakeInhibitMs > 0 ? "in " + Math.ceil(p.wakeInhibitMs / 1000) + " s"
+        : (status.controllers.length ? "Armed" : "No controllers");
+
+      const btn = $("power-btn");
+      btn.disabled = false;
+      if (p.state === "OFF") {
+        armedOff = 0;
+        btn.className = "pbtn";
+        btn.setAttribute("aria-label", "Power on");
+      } else if (Date.now() < armedOff) {
+        btn.className = "pbtn armed";
+        btn.setAttribute("aria-label", "Confirm force off");
+      } else {
+        if (armedOff) setMsg("power-msg", "");
+        armedOff = 0;
+        btn.className = "pbtn off";
+        btn.setAttribute("aria-label", "Force off");
+      }
+    }
+
+    $("power-btn").onclick = async () => {
+      const off = status && status.power.state !== "OFF";
+      if (off && Date.now() >= armedOff) {
+        armedOff = Date.now() + 4000;
+        setMsg("power-msg", "Tap again to force off. This cuts PSU power immediately, like pulling the " +
+                            "plug, and unsaved work is lost.", "err");
+        renderPower();
+        return;
+      }
+      armedOff = 0;
+      setMsg("power-msg", "");
+      try {
+        $("power-btn").disabled = true;
+        await api("/api/power", "POST", { action: off ? "off" : "on" });
+        setMsg("power-msg", off ? "Power cut." : "Powering on…", "ok");
+      } catch (e) {
+        setMsg("power-msg", e.message, "err");
+      }
+      refresh();
+    };
+
+    function renderNet(first) {
+      const n = status.net;
+      let line, pill;
+      if (n.mode === "setup") {
+        line = n.ssid ? "Joins " + n.ssid + " after setup." : "No router set yet.";
+        pill = n.ssid ? ["Saved", "blue"] : ["Not set", ""];
+      } else if (n.staConnected) {
+        line = "Connected at " + n.ip + " (" + n.rssi + " dBm).";
+        pill = ["Connected", "green"];
+      } else if (n.ssid) {
+        line = "Can't reach " + n.ssid + ", retrying.";
+        pill = ["Retrying", "amber"];
+      } else {
+        line = "No router set.";
+        pill = ["Not set", ""];
+      }
+      if (n.mode !== "setup" && n.apActive) line += " Fallback network is up at " + n.apIp + " (" + n.apClients + " connected).";
+      $("wifi-state").textContent = line;
+      setPill("wifi-pill", pill[0], pill[1]);
+      if (first) {
+        $("ssid").value = n.ssid || "";
+        $("wpass").placeholder = n.hasPassword ? "Saved password (leave blank to keep)" : "";
+      }
+    }
+
+    $("wifi-btn").onclick = async () => {
+      const ssid = $("ssid").value.trim();
+      const open = $("wopen").checked;
+      const pw = open ? "" : $("wpass").value;
+      setMsg("wifi-msg", "");
+      if (pw && (pw.length < 8 || pw.length > 63)) return setMsg("wifi-msg", "WiFi passwords are 8-63 characters.", "err");
+      const keep = !open && !pw && status.net.hasPassword;
+      try {
+        $("wifi-btn").disabled = true;
+        await api("/api/wifi", "POST", { ssid, password: pw, keepPassword: keep });
+        $("wpass").value = "";
+        $("wopen").checked = false;
+        $("wpass").placeholder = (pw || keep) ? "Saved password (leave blank to keep)" : "";
+        setMsg("wifi-msg", info.mode === "setup" ? "Saved. Used after you finish setup."
+          : ssid ? "Saved. Joining " + ssid + "; if the address changes, open http://" + info.hostname + ".local."
+          : "Router removed.", "ok");
+      } catch (e) {
+        setMsg("wifi-msg", e.message, "err");
+      } finally {
+        $("wifi-btn").disabled = false;
+      }
+    };
+
+    // --- Controllers ---
+    let editing = null;   // addr whose nickname is being edited
+    let removing = null;  // addr armed for removal
+
+    function renderControllers() {
+      const list = status.controllers;
+      setPill("ctl-pill", list.length + " / " + status.maxControllers, "");
+      $("ctl-empty").classList.toggle("hidden", list.length > 0);
+      $("add-btn").disabled = list.length >= status.maxControllers;
+      if (editing) return;  // don't clobber the input being typed in
+      const box = $("ctl-list");
+      box.replaceChildren();
+      for (const c of list) {
+        const row = el("div");
+        const nm = el("div", "nm");
+        nm.appendChild(el("b", "", c.name || "Unnamed controller"));
+        nm.appendChild(el("small", "", c.addr));
+        row.appendChild(nm);
+        const acts = el("div", "acts");
+        let pill;
+        if (c.present) pill = el("span", "pill green", "On now");
+        else if (c.seenAgo !== undefined) pill = el("span", "pill", "Seen " + ago(c.seenAgo * 1000) + " ago");
+        else pill = el("span", "pill", "Not seen");
+        if (!c.armed) pill.title = "Wakes the machine after it has been switched off once";
+        const ren = el("button", "btn-2", "Rename");
+        ren.onclick = () => startRename(row, c);
+        const rm = el("button", "btn-2 danger" + (removing === c.addr ? " armed" : ""),
+                      removing === c.addr ? "Confirm" : "Remove");
+        rm.onclick = () => removeCtl(c.addr);
+        acts.append(pill, ren, rm);
+        row.appendChild(acts);
+        box.appendChild(row);
+      }
+    }
+
+    function startRename(row, c) {
+      editing = c.addr;
+      const nm = row.querySelector(".nm");
+      const input = el("input");
+      input.maxLength = 24;
+      input.value = c.name;
+      input.placeholder = "Nickname";
+      nm.replaceChildren(input);
+      const acts = row.querySelector(".acts");
+      const save = el("button", "btn-2", "Save");
+      const cancel = el("button", "btn-2", "Cancel");
+      const done = () => { editing = null; renderControllers(); };
+      save.onclick = async () => {
+        try { await api("/api/controllers/rename", "POST", { addr: c.addr, name: input.value.trim() }); setMsg("add-msg", ""); }
+        catch (e) { setMsg("add-msg", e.message, "err"); }
+        editing = null;
+        refresh();
+      };
+      cancel.onclick = done;
+      input.onkeydown = (e) => { if (e.key === "Enter") save.click(); if (e.key === "Escape") done(); };
+      acts.replaceChildren(save, cancel);
+      input.focus();
+    }
+
+    async function removeCtl(addr) {
+      if (removing !== addr) {
+        removing = addr;
+        renderControllers();
+        setTimeout(() => { if (removing === addr) { removing = null; renderControllers(); } }, 4000);
+        return;
+      }
+      removing = null;
+      try { await api("/api/controllers/remove", "POST", { addr }); setMsg("add-msg", ""); }
+      catch (e) { setMsg("add-msg", e.message, "err"); }
+      refresh();
+    }
+
+    async function bind(addr, name, msgId) {
+      setMsg(msgId, "");
+      try {
+        await api("/api/controllers/add", "POST", { addr, name });
+        setMsg(msgId, "Bound " + (name || addr) + ".", "ok");
+        refresh();
+        return true;
+      } catch (e) {
+        setMsg(msgId, e.message, "err");
+        return false;
+      }
+    }
+
+    $("add-btn").onclick = async () => {
+      const addr = $("manual").value.trim().toLowerCase();
+      if (!MAC_RE.test(addr)) return setMsg("add-msg", "Enter the address as aa:bb:cc:dd:ee:ff.", "err");
+      $("add-btn").disabled = true;
+      if (await bind(addr, $("nick").value.trim(), "add-msg")) $("manual").value = $("nick").value = "";
+      $("add-btn").disabled = false;
+    };
+
+    // --- Discovery ---
+    let scanning = false;  // a scan was started from this page
 
     function rssiBars(r) {
       if (r >= -55) return "▂▄▆█";
@@ -138,71 +752,109 @@
       return "▂";
     }
 
-    async function pollDevices() {
+    $("scan-btn").onclick = async () => {
+      setMsg("found-msg", "");
       try {
-        const data = await api("/api/ble/devices");
-        const list = (data.devices || []).sort((a, b) => b.rssi - a.rssi);
-        $("scan-state").textContent = list.length
-          ? "Scanning… " + list.length + " device(s) seen"
-          : "Scanning… (no devices yet)";
-        const box = $("dev-list");
-        box.innerHTML = "";
-        for (const d of list) {
-          const el = document.createElement("div");
-          el.className = "dev" + (selected === d.addr ? " sel" : "");
-          el.innerHTML =
-            '<div class="nm"><b>' + (d.name || "(unknown)") + "</b>" +
-            "<small>" + d.addr + "</small></div>" +
-            '<div class="rssi">' + rssiBars(d.rssi) + "<br>" + d.rssi + " dBm</div>";
-          el.onclick = () => { selected = d.addr; $("manual").value = ""; refreshSel(); };
-          box.appendChild(el);
-        }
+        await api("/api/ble/discover", "POST", {});
+        scanning = true;
+        $("found-list").replaceChildren();
+        pollDevices();
       } catch (e) {
-        $("scan-state").textContent = "Scan error: " + e.message;
+        setMsg("found-msg", e.message, "err");
+      }
+    };
+
+    async function pollDevices() {
+      let data;
+      try { data = await api("/api/ble/devices"); } catch (e) { return; }
+      if (!data.discovering) scanning = false;
+      setPill("scan-pill", data.discovering ? "Scanning" : "Idle", data.discovering ? "blue" : "");
+      $("scan-btn").textContent = data.discovering ? "Restart" : "Scan";
+      const bound = new Set((status ? status.controllers : []).map((c) => c.addr));
+      const list = data.devices.filter((d) => !bound.has(d.addr))
+        // Named devices first (controllers announce a name), then by signal.
+        .sort((a, b) => (!!b.name - !!a.name) || (b.rssi - a.rssi));
+      $("found-empty").textContent = data.discovering ? "Scanning… switch the controller on in pairing mode."
+        : "Start a scan to find nearby controllers.";
+      $("found-empty").classList.toggle("hidden", list.length > 0);
+      const full = status && status.controllers.length >= status.maxControllers;
+      const box = $("found-list");
+      box.replaceChildren();
+      for (const d of list) {
+        const row = el("div", "found-row");
+        const nm = el("div", "nm");
+        nm.append(el("b", "", d.name || "(no name)"), el("small", "", d.addr));
+        const rs = el("div", "rssi");
+        rs.append(el("div", "", rssiBars(d.rssi)), el("div", "", d.rssi + " dBm"));
+        const acts = el("div", "acts");
+        const b = el("button", "btn-2", "Bind");
+        b.disabled = full;
+        b.onclick = async () => { b.disabled = true; if (!await bind(d.addr, (d.name || "").slice(0, 24), "found-msg")) b.disabled = false; };
+        acts.append(rs, b);
+        row.append(nm, acts);
+        box.appendChild(row);
       }
     }
 
-    $("manual").oninput = () => {
-      const v = $("manual").value.trim().toLowerCase();
-      selected = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(v) ? v : null;
-      refreshSel();
+    // --- Password change ---
+    $("chpw-btn").onclick = async () => {
+      const np = $("np").value;
+      setMsg("chpw-msg", "");
+      if (np.length < 6) return setMsg("chpw-msg", "At least 6 characters.", "err");
+      if (np !== $("np2").value) return setMsg("chpw-msg", "Passwords don't match.", "err");
+      try {
+        const data = await api("/api/password", "POST", { current: $("cur").value, password: np });
+        token = data.token;
+        store("bc250-token", token);
+        $("cur").value = $("np").value = $("np2").value = "";
+        setMsg("chpw-msg", "Password changed. Other devices are signed out.", "ok");
+      } catch (e) {
+        setMsg("chpw-msg", e.message, "err");
+      }
     };
 
-    function refreshSel() {
-      $("save-btn").disabled = !selected;
-      document.querySelectorAll(".dev").forEach((el) => {
-        const addr = el.querySelector("small").textContent;
-        el.classList.toggle("sel", addr === selected);
-      });
+    // --- Log ---
+    async function pollLog() {
+      let data;
+      try { data = await api("/api/log"); } catch (e) { return; }
+      const box = $("log");
+      if (!data.lines.length) return box.replaceChildren(el("div", "muted", "No events yet."));
+      box.replaceChildren(...data.lines.slice().reverse().map((l) => {
+        const row = el("div");
+        row.append(el("span", "", ago(data.now - l.t).padStart(7) + " ago  "), document.createTextNode(l.msg));
+        return row;
+      }));
     }
 
-    $("save-btn").onclick = async () => {
-      const msg = $("dev-msg");
-      msg.className = "msg";
+    // --- Setup finish ---
+    $("finish-btn").onclick = async () => {
       try {
-        $("save-btn").disabled = true;
-        await api("/api/ble/select", "POST", { addr: selected });
+        $("finish-btn").disabled = true;
         await api("/api/finish", "POST", {});
-        if (pollTimer) clearInterval(pollTimer);
-        msg.className = "msg ok";
-        msg.textContent = "Bound " + selected + ". Rebooting into normal mode…";
-        $("scan-state").textContent = "";
-        $("dev-list").innerHTML = "";
+        stopTimers();
+        const ssid = status && status.net.ssid;
+        setMsg("finish-msg", "Restarting into normal mode. " + (ssid
+          ? "Reconnect your device to " + ssid + " and open http://" + info.hostname + ".local."
+          : "No router is set, so the switch brings up the fallback network again."), "ok");
       } catch (e) {
-        msg.className = "msg err"; msg.textContent = e.message;
-        $("save-btn").disabled = false;
+        setMsg("finish-msg", e.message, "err");
+        $("finish-btn").disabled = false;
       }
     };
 
     // --- Boot ---
     (async () => {
       try {
-        const st = await api("/api/status");
-        if (st.wakeAddr) $("subtitle").textContent = "Currently bound: " + st.wakeAddr;
-        initPassScreen(st.passwordSet);
+        info = await api("/api/info");
       } catch (e) {
-        $("subtitle").textContent = "Cannot reach device: " + e.message;
+        show("nopass");
+        $("screen-nopass").querySelector("h2").textContent = "Can't reach the switch";
+        $("screen-nopass").querySelector(".muted").textContent = e.message;
+        return;
       }
+      if (!info.passwordSet && info.mode !== "setup") return show("nopass");
+      token = info.passwordSet ? load("bc250-token") : null;
+      if (token) startMain(); else showPassScreen();
     })();
   </script>
 </body>
