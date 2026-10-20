@@ -10,9 +10,11 @@ button — plus optional "turn on when I pick up my controller" via Bluetooth.
 - **Push-button power**: tap to turn on; hold 5 s while running to force off.
 - **Follows the board**: if the OS shuts the board down, the PSU is cut automatically.
 - **Boot watchdog**: if the board doesn't come up within 10 s, the PSU is released.
-- **BLE controller wake** (optional): when a bound controller (e.g. an 8BitDo) powers
-  on, the machine powers on with it.
-- **WiFi setup portal**: configure the bound controller from a phone — no reflashing.
+- **BLE controller wake** (optional): when any of up to 5 bound controllers (e.g. an
+  8BitDo or Xbox controller) powers on, the machine powers on with it.
+- **Web UI**: always on at `http://bc250-switch.local` on your home WiFi — live power
+  state, power on / force off, controller management with nicknames, WiFi settings and
+  an event log. Falls back to its own network if the router is unreachable.
 
 ## Board targets
 
@@ -112,27 +114,57 @@ The button is the primary control and always works, even with no controller conf
 
 ## Bluetooth controller wake
 
-When a controller is bound (via the portal), the machine **follows the controller**:
-turn the controller on and the machine powers up. After a power-off there's a short
-guard window so the controller's reconnect burst can't immediately switch it back on —
-turn the controller off within that window to keep the machine down.
+Up to 5 controllers can be bound from the web UI, each with an optional nickname. The
+machine **follows the controllers**: turn any bound controller on and the machine powers
+up. After a power-off there's a 15 s guard window so the controller's reconnect burst
+can't immediately switch it back on — turn the controller off within that window to keep
+the machine down.
 
-## Setup portal
+Detection uses the controller's Bluetooth LE advertisements, so the controller has to be
+in Bluetooth mode (an Xbox controller in dongle mode is invisible to the ESP32). A newly
+bound controller only starts waking the machine after it has been switched off once, so
+binding a controller that is on doesn't power the machine up.
 
-Hold the button ≥ 8 s while off to start the portal. It never starts on its own, even on
-first use — without a bound controller the button still works as a plain power switch.
+## Web UI
+
+In normal operation the switch joins your router and serves the web UI at
+`http://bc250-switch.local` (or its IP address, shown in the serial log and the UI):
+
+- **Power**: live state, board-sense voltage and PSU state. *Power on* when off; *Force
+  off* when on, which needs a second tap because it cuts PSU power like pulling the plug.
+  There's no wire to the BC250's power button, so shut down from the OS when you can —
+  the switch follows the board down.
+- **Controllers**: bound controllers with presence, rename and remove; *Add a
+  controller* runs a 30 s Bluetooth scan to pick from, or takes a MAC address.
+- **WiFi**: the router to join (2.4 GHz only). Saving reconnects right away.
+- **Password** change, and the last 40 events.
+
+Everything needs the password. Sessions last until you sign out, 7 days of inactivity,
+or a restart of the switch.
+
+**Fallback network**: if no router is set, or it stays unreachable for 20 s, the switch
+brings up the open network **`BC250 Switch Setup`** (UI at `http://192.168.4.1`) and
+keeps retrying the router every minute. The fallback network goes away once the router
+is back and nobody is connected to it.
+
+## Setup mode
+
+The first password can only be created in setup mode, which needs physical access: hold
+the button ≥ 8 s while off. It never starts on its own, even on first use — without a
+password the button still works as a plain power switch.
 
 1. Connect to the open WiFi network **`BC250 Switch Setup`** and open `http://192.168.4.1`.
-2. Create a password.
-3. Pick your controller from the live BLE scan (or enter its MAC).
+2. Create a password (or sign in, if one is set).
+3. Optionally bind controllers and set the router now; both can be done later.
 4. Finish — the device reboots into normal operation.
 
-To leave the portal without finishing, release the button and hold it ≥ 8 s again. The
-hold that entered setup mode doesn't count, however long you keep it down.
+The PSU stays off in setup mode. To leave without finishing, release the button and hold
+it ≥ 8 s again. The hold that entered setup mode doesn't count, however long you keep it
+down.
 
 ## Build & flash
 
-PlatformIO (pioarduino). Two steps — firmware and the portal's web UI (a single
+PlatformIO (pioarduino). Two steps — firmware and the web UI (a single
 `app/index.html` packed into SPIFFS):
 
 ```bash
@@ -161,3 +193,7 @@ pio run -e esp32-c3-devkitm-1 -t uploadfs
 - Serial debug runs at **115200** baud — USB-CDC on the ESP32-C3 profile, UART0 on
   ESP32-WROOM-32 boards.
 - Pin assignments and all timing constants live in [include/board.h](include/board.h).
+- **Don't restart or flash the ESP32 while the machine is on.** While it resets, `PS_ON#`
+  is released and the PSU cuts power. On boards with a USB auto-reset circuit, opening
+  the serial port also resets the ESP32.
+- The web UI is plain HTTP on your LAN. Don't expose port 80 to the internet.
