@@ -101,6 +101,51 @@ off. No ground wire is needed from this header — the ESP already shares ground
 board through the ATX connector. Use the board-specific wiring table above to map
 `PS_ON_PIN` and `BOARD_SENSE` to actual GPIO numbers.
 
+### HP Common Slot server PSU (e.g. HSTNS-PL14)
+
+HP Common Slot server PSUs such as the 460 W **HSTNS-PL14** (DPS-460EB) are 12 V-only,
+which is all the BC250 needs. They have no 24-pin connector, no `PS_ON#` green wire
+and no 5 V standby, so the wiring differs from ATX. The firmware is unchanged:
+the PSU's enable pin is active LOW, just like `PS_ON#`.
+
+HP doesn't publish this pinout. The numbers below are from community write-ups of
+the Common Slot family (mostly the 750 W / 1200 W units, which share the pinout).
+Verify each pin with a multimeter before connecting anything.
+
+| PSU pin | Signal | Connects to |
+|---------|--------|-------------|
+| 1–13 (large blades) | +12 V main | BC250 PCI-E power |
+| 14–26 (large blades) | GND main | BC250 ground |
+| 37 | +12 V standby (on whenever mains is present) | 12 V→5 V buck converter input (ESP power) **and** one end of a 22 kΩ resistor |
+| 36 | PRESENT | Other end of the 22 kΩ resistor — **nothing else** |
+| 33 | ENABLE, active LOW (LOW = 12 V output on) | `PS_ON_PIN` (directly or via a MOSFET, see below) |
+| 30 | Signal ground | ESP GND, buck converter GND |
+
+> **Never short pin 36 directly to pin 37 — it destroys the PSU.** Always go through
+> the ~22 kΩ resistor (20–22 kΩ works), which makes the PSU think it is seated in a
+> server slot.
+
+**Powering the ESP**: there is no 5 V standby, so feed the ESP's 5V/VIN pin from a
+small 12 V→5 V buck converter on pin 37. Don't use a linear regulator or resistor
+from 12 V; it overheats once WiFi and BLE are active.
+
+**Check pin 33 before connecting it.** With mains connected, the 22 kΩ resistor fitted
+and pin 33 left open, measure pin 33 against pin 30:
+
+- **≤ 3.3 V**: wire `PS_ON_PIN` straight to pin 33. Nothing else changes.
+- **Above 3.3 V**: don't connect the ESP pin directly. Put an N-channel MOSFET (e.g.
+  2N7000) in between: drain to pin 33, source to GND, gate to `PS_ON_PIN` through
+  ~100 Ω, plus 10 kΩ from gate to GND so the PSU stays off while the ESP resets.
+  The MOSFET inverts the logic, so in [include/board.h](include/board.h) set
+  `PS_ON_ASSERT = HIGH` and `PS_ON_RELEASE = LOW`, and in [src/main.cpp](src/main.cpp)
+  change both `pinMode(PS_ON_PIN, OUTPUT_OPEN_DRAIN)` calls to `OUTPUT`.
+
+If you use a Common Slot breakout board, it usually has the PRESENT resistor fitted and
+an on/off switch on the enable line. Find which switch terminal goes to pin 33 and
+which goes to ground. Connect the ESP across those two, and leave the switch off.
+
+The button and the `BOARD_SENSE` wire to TPMS1 pin 9 stay as described above.
+
 ## Button controls
 
 | Action | Result |
