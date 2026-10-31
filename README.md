@@ -105,44 +105,52 @@ board through the ATX connector. Use the board-specific wiring table above to ma
 
 HP Common Slot server PSUs such as the 460 W **HSTNS-PL14** (DPS-460EB) are 12 V-only,
 which is all the BC250 needs. They have no 24-pin connector, no `PS_ON#` green wire
-and no 5 V standby, so the wiring differs from ATX. The firmware is unchanged:
-the PSU's enable pin is active LOW, just like `PS_ON#`.
+and no 5 V standby, so the wiring differs from ATX. The firmware is unchanged.
 
-HP doesn't publish this pinout. The numbers below are from community write-ups of
-the Common Slot family (mostly the 750 W / 1200 W units, which share the pinout).
-Verify each pin with a multimeter before connecting anything.
+HP doesn't publish this pinout. The 33↔36 enable bridge was confirmed on an HSTNS-PL14;
+the other pins come from community write-ups of the Common Slot family. Verify them with
+a multimeter on your own unit before connecting anything.
 
 | PSU pin | Signal | Connects to |
 |---------|--------|-------------|
 | 1–13 (large blades) | +12 V main | BC250 PCI-E power |
-| 14–26 (large blades) | GND main | BC250 ground |
-| 37 | +12 V standby (on whenever mains is present) | 12 V→5 V buck converter input (ESP power) **and** one end of a 22 kΩ resistor |
-| 36 | PRESENT | Other end of the 22 kΩ resistor — **nothing else** |
-| 33 | ENABLE, active LOW (LOW = 12 V output on) | `PS_ON_PIN` (directly or via a MOSFET, see below) |
-| 30 | Signal ground | ESP GND, buck converter GND |
+| 14–26 (large blades) | GND main | BC250 ground, ESP GND, buck converter GND |
+| 37 | +12 V standby (on whenever mains is present) | 12 V→5 V buck converter input (ESP power) |
+| 33 | Enable | Optocoupler output (collector), see below |
+| 36 | Enable return | Optocoupler output (emitter), see below |
 
-> **Never short pin 36 directly to pin 37 — it destroys the PSU.** Always go through
-> the ~22 kΩ resistor (20–22 kΩ works), which makes the PSU think it is seated in a
-> server slot.
+**Bridging pins 33 and 36 turns on the 12 V main output.** Opening the bridge turns
+it off. The ESP makes that bridge through an optocoupler.
+
+> **Never connect pin 36 to pin 37 (12 V standby).** Pin 36 is the enable return, not
+> a pull-up input, and tying it to 12 V standby has destroyed a PSU.
 
 **Powering the ESP**: there is no 5 V standby, so feed the ESP's 5V/VIN pin from a
 small 12 V→5 V buck converter on pin 37. Don't use a linear regulator or resistor
 from 12 V; it overheats once WiFi and BLE are active.
 
-**Check pin 33 before connecting it.** With mains connected, the 22 kΩ resistor fitted
-and pin 33 left open, measure pin 33 against pin 30:
+**Switching the PSU**: use an optocoupler such as a PC817, so the PSU's enable circuit
+never connects to the ESP electrically:
 
-- **≤ 3.3 V**: wire `PS_ON_PIN` straight to pin 33. Nothing else changes.
-- **Above 3.3 V**: don't connect the ESP pin directly. Put an N-channel MOSFET (e.g.
-  2N7000) in between: drain to pin 33, source to GND, gate to `PS_ON_PIN` through
-  ~100 Ω, plus 10 kΩ from gate to GND so the PSU stays off while the ESP resets.
-  The MOSFET inverts the logic, so in [include/board.h](include/board.h) set
-  `PS_ON_ASSERT = HIGH` and `PS_ON_RELEASE = LOW`, and in [src/main.cpp](src/main.cpp)
-  change both `pinMode(PS_ON_PIN, OUTPUT_OPEN_DRAIN)` calls to `OUTPUT`.
+```
+ESP 3V3 ──[ 330 Ω ]──► LED anode (PC817 pin 1)
+PS_ON_PIN ───────────► LED cathode (PC817 pin 2)
+PSU pin 33 ──────────► collector (PC817 pin 4)
+PSU pin 36 ──────────► emitter (PC817 pin 3)
+```
 
-If you use a Common Slot breakout board, it usually has the PRESENT resistor fitted and
-an on/off switch on the enable line. Find which switch terminal goes to pin 33 and
-which goes to ground. Connect the ESP across those two, and leave the switch off.
+The LED's cathode goes to `PS_ON_PIN`, which is open-drain and active LOW. Pulling it
+LOW lights the LED, which closes the bridge, which turns the PSU on. Releasing it turns
+the PSU off. That's the same logic the firmware already uses for `PS_ON#`, so no code
+changes are needed. While the ESP resets or flashes, the pin floats, the LED is dark
+and the PSU turns off, the same as with ATX.
+
+The phototransistor has a polarity. With mains connected and the bridge open, measure
+pin 33 against pin 36: the more positive pin goes to the collector. If pin 36 reads
+higher, swap the two.
+
+If you use a Common Slot breakout board with an on/off switch, connect the
+optocoupler output across the switch terminals instead, and leave the switch off.
 
 The button and the `BOARD_SENSE` wire to TPMS1 pin 9 stay as described above.
 
