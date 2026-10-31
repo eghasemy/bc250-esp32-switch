@@ -27,6 +27,7 @@ working.
 |-------------|--------|--------|-------|
 | `esp32-wroom-32` | ESP32-WROOM-32 (`esp32dev`) | UART0 at 115200 | Default target, 4 MB flash, no PSRAM required |
 | `esp32-c3-devkitm-1` | ESP32-C3-DevKitM-1 | USB-CDC at 115200 | Legacy mapping retained for backward compatibility |
+| `esp32-c3-uart` | ESP32-C3 boards with a USB-UART bridge (CH340/CP2102) | UART0 at 115200 | Same pins as `esp32-c3-devkitm-1` |
 
 ## Wiring
 
@@ -179,6 +180,10 @@ pio run -e esp32-c3-devkitm-1 -t upload
 pio run -e esp32-c3-devkitm-1 -t uploadfs
 ```
 
+If the C3 board connects through a CH340/CP2102 chip (it shows up as
+`/dev/ttyUSB*` rather than `/dev/ttyACM*`), use `esp32-c3-uart` instead so the
+serial log appears on that port.
+
 ## Notes
 
 - **Bootstrapping pins**: on ESP32-WROOM-32, avoid moving the external wiring to
@@ -190,8 +195,8 @@ pio run -e esp32-c3-devkitm-1 -t uploadfs
   reduced-power SoftAP workaround from
   [arduino-esp32 #6551](https://github.com/espressif/arduino-esp32/issues/6551).
   The ESP32-WROOM-32 profile keeps the normal full-power setting.
-- Serial debug runs at **115200** baud — USB-CDC on the ESP32-C3 profile, UART0 on
-  ESP32-WROOM-32 boards.
+- Serial debug runs at **115200** baud — USB-CDC on the `esp32-c3-devkitm-1` profile,
+  UART0 on `esp32-c3-uart` and ESP32-WROOM-32 boards.
 - Pin assignments and all timing constants live in [include/board.h](include/board.h).
 - **Don't restart or flash the ESP32 while the machine is on.** While it resets, `PS_ON#`
   is released and the PSU cuts power. On boards with a USB auto-reset circuit, opening
