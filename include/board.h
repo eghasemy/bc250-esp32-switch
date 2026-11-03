@@ -11,6 +11,7 @@
 //       GPIO25 (BUTTON_GND)    <-----> momentary switch terminal B
 //       GPIO27 (PS_ON_PIN)     <-----> ATX PS_ON# (green wire, active LOW)
 //       GPIO34 (BOARD_SENSE)   <-----> BC250 TPMS1 pin 9 (3.3V = board on)
+//       GPIO26 (LED_PIN)       <-----> WS2812 LED bar DIN (optional)
 //     BOARD_SENSE must stay on ADC1 because the setup portal uses WiFi/BLE and
 //     ADC2 readings are not reliable while WiFi is active on the original ESP32.
 //
@@ -19,6 +20,7 @@
 //       GPIO6  (BUTTON_GND)    <-----> momentary switch terminal B
 //       GPIO4  (PS_ON_PIN)     <-----> ATX PS_ON# (green wire, active LOW)
 //       GPIO3  (BOARD_SENSE)   <-----> BC250 TPMS1 pin 9 (3.3V = board on)
+//       GPIO7  (LED_PIN)       <-----> WS2812 LED bar DIN (optional)
 
 #ifndef BC250_NATIVE_USB_SERIAL
 #define BC250_NATIVE_USB_SERIAL 0
@@ -30,6 +32,7 @@ const int BUTTON_SENSE = 33;
 const int BUTTON_GND   = 25;
 const int PS_ON_PIN    = 27;
 const int BOARD_SENSE  = 34;
+const int LED_PIN      = 26;
 #define AP_TX_POWER WIFI_POWER_19_5dBm
 #elif defined(BC250_BOARD_ESP32_C3_DEVKITM_1)
 const char *const BC250_BOARD_NAME = "ESP32-C3-DevKitM-1";
@@ -37,6 +40,7 @@ const int BUTTON_SENSE = 5;
 const int BUTTON_GND   = 6;
 const int PS_ON_PIN    = 4;
 const int BOARD_SENSE  = 3;
+const int LED_PIN      = 7;
 #define AP_TX_POWER WIFI_POWER_8_5dBm
 #else
 #error "Unsupported BC250 board profile. Build one of the configured PlatformIO environments."
@@ -159,3 +163,19 @@ const unsigned long BLE_PRESENCE_TIMEOUT_MS = 4000;
 // machine follows it back on. It also rides out the brief reconnect-advertising
 // burst the controller emits when it loses its host at shutdown.
 const unsigned long BLE_WAKE_COOLDOWN_MS = 15000;
+
+//*******  LED bar  ***************
+
+// The PC drives the bar with the WLED realtime UDP protocol (steamos-led-wled
+// sends DRGB here); see leds.h.
+const uint16_t LED_UDP_PORT = 21324;
+
+// Render rate for local scenes and the crossfade between them.
+const unsigned long LED_FRAME_MS = 20;
+const unsigned long LED_FADE_MS  = 400;
+
+// "Test" from the web UI shows its colour this long.
+const unsigned long LED_TEST_MS = 5000;
+
+// The boot animation gives up if the PC hasn't taken over the bar by then.
+const unsigned long LED_BOOT_ANIM_MAX_MS = 120000;

@@ -17,6 +17,20 @@ static String     passHash;
 static bool       forceSetup = false;
 static String     wifiSsid;
 static String     wifiPass;
+static LedConfig  leds;
+
+static const LedConfig LED_DEFAULTS = {
+  .enabled    = false,
+  .count      = 17,  // the Steam Machine bar; the PC bridge remaps to any count
+  .brightness = 128,
+  .order      = 0,
+  .network    = true,
+  .bootAnim   = true,
+  .offScene   = SCENE_OFF,
+  .offColor   = 0x0a2a4a,
+  .idleScene  = SCENE_OFF,
+  .idleColor  = 0x1a9fff,
+};
 
 // NVS keys are limited to 15 characters: "c0a"/"c0n" = slot 0 address/name.
 static void slotKeys(int i, char *addrKey, char *nameKey) {
@@ -69,6 +83,12 @@ void loadConfig() {
     copyStr(ctls[ctlCount].addr, sizeof(ctls[0].addr), addr);
     copyStr(ctls[ctlCount].name, sizeof(ctls[0].name), getStr(nk));
     ctlCount++;
+  }
+  // Stored as one blob; a size mismatch (older/newer layout) falls back to
+  // defaults.
+  if (!prefs.isKey("leds") || prefs.getBytesLength("leds") != sizeof(leds) ||
+      prefs.getBytes("leds", &leds, sizeof(leds)) != sizeof(leds)) {
+    leds = LED_DEFAULTS;
   }
   String legacy = getStr("wakeAddr");
   prefs.end();
@@ -185,5 +205,18 @@ void setWifi(const String &ssid, const String &pass) {
   prefs.begin(NS, false);
   prefs.putString("wifiSsid", ssid);
   prefs.putString("wifiPass", pass);
+  prefs.end();
+}
+
+LedConfig getLedConfig() {
+  Lock lock;
+  return leds;
+}
+
+void setLedConfig(const LedConfig &c) {
+  Lock lock;
+  leds = c;
+  prefs.begin(NS, false);
+  prefs.putBytes("leds", &leds, sizeof(leds));
   prefs.end();
 }

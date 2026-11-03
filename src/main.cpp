@@ -3,6 +3,7 @@
 #include "board.h"
 #include "ble.h"
 #include "config.h"
+#include "leds.h"
 #include "log.h"
 #include "net.h"
 #include "power.h"
@@ -26,6 +27,8 @@
 //     one appears while we're OFF, that wakes the machine just like a button tap.
 //   * The web UI (web.cpp) runs alongside on the router network or the fallback
 //     AP, and can request power on / force off through power.h.
+//   * The optional LED bar (leds.cpp) shows what the PC sends it, and falls back
+//     to scenes that follow the power state.
 
 enum PowerState {
   STATE_OFF,      // PSU released, board down
@@ -160,6 +163,15 @@ static bool debounce(bool raw, bool *stable, bool *lastRaw,
     return true;
   }
   return false;
+}
+
+static LedPower ledPower() {
+  if (g_setupMode) return LedPower::Setup;
+  switch (state) {
+    case STATE_BOOTING: return LedPower::Booting;
+    case STATE_ON:      return LedPower::On;
+    default:            return LedPower::Off;
+  }
 }
 
 // --- power.h ---
@@ -399,6 +411,7 @@ void setup() {
   }
   bleBegin(g_setupMode);
   netBegin(g_setupMode);
+  ledsBegin(g_setupMode);
   webBegin(g_setupMode);
 }
 
@@ -409,6 +422,7 @@ void loop() {
   } else {
     normalLoop(now);
   }
+  ledsLoop(now, ledPower());
   bleLoop(now);
   netLoop(now);
   webLoop(now);

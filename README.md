@@ -15,6 +15,10 @@ button — plus optional "turn on when I pick up my controller" via Bluetooth.
 - **Web UI**: always on at `http://bc250-switch.local` on your home WiFi — live power
   state, power on / force off, controller management with nicknames, WiFi settings and
   an event log. Falls back to its own network if the router is unreachable.
+- **LED bar** (optional): drives a WS2812 strip that mirrors Steam's Game Mode LED
+  settings from the PC (WLED-compatible, for
+  [steamos-led-wled](https://github.com/rpf16rj/steamos-led-wled)), with boot and
+  standby lighting that follows the power state.
 
 ## Board targets
 
@@ -43,6 +47,7 @@ the PSU, and the board.
 | GPIO25 | Momentary switch, terminal B | Driven LOW as the switch's ground |
 | GPIO27 | ATX `PS_ON#` (green wire) | **Open-drain**, active LOW: LOW = PSU on, released = off |
 | GPIO34 | BC250 `TPMS1` (pin 9) | ADC1 input; ~3.3 V when the board is up, 0 when off |
+| GPIO26 | LED strip `DIN` (optional) | See [LED bar](#led-bar) |
 | 5VSB / GND | PSU standby + common ground | Permanent power for the ESP |
 
 ### ESP32-C3-DevKitM-1 wiring (legacy)
@@ -53,6 +58,7 @@ the PSU, and the board.
 | GPIO6 | Momentary switch, terminal B | Driven LOW as the switch's ground |
 | GPIO4 | ATX `PS_ON#` (green wire) | **Open-drain**, active LOW: LOW = PSU on, released = off |
 | GPIO3 | BC250 `TPMS1` (pin 9) | ~3.3 V when the board is up, 0 when off |
+| GPIO7 | LED strip `DIN` (optional) | See [LED bar](#led-bar) |
 | 5VSB / GND | PSU standby + common ground | Permanent power for the ESP |
 
 `PS_ON#` idles at ~5 V (pulled up inside the PSU). The ESP pin is driven open-drain so
@@ -147,6 +153,41 @@ or a restart of the switch.
 brings up the open network **`BC250 Switch Setup`** (UI at `http://192.168.4.1`) and
 keeps retrying the router every minute. The fallback network goes away once the router
 is back and nobody is connected to it.
+
+## LED bar
+
+The switch can drive a WS2812 / NeoPixel strip (up to 64 LEDs) that shows Steam's Game
+Mode LED settings, like the Steam Machine's light bar. The PC side is
+[steamos-led-wled](https://github.com/rpf16rj/steamos-led-wled): it reads the LED state
+from Steam and sends frames over the network with the WLED realtime UDP protocol. The
+switch answers as a WLED device, so no separate LED controller is needed.
+
+**Wiring**: strip `DIN` to the LED pin (GPIO26 on the WROOM, GPIO7 on the C3), strip
+`GND` to common ground, strip `5V` to the PSU's 5 V standby so it can light while the
+machine is off. The ESP's 3.3 V data usually works with a short data wire; if the strip
+flickers or shows wrong colours, put a 74AHCT125 level shifter in the data line.
+Budget up to 60 mA per LED at full white against the standby rail; the brightness cap
+in the UI limits that.
+
+**Set up**:
+
+1. In the web UI, open **LED bar**, tick *Drive the LED bar*, set the LED count and save.
+   *Light up for 5 s* checks the wiring and colour order.
+2. On the BC250, install steamos-led-wled. Give the installer the switch's IP address
+   (shown on the LED bar page; reserve it in your router), UDP port `21324` and the LED
+   count. Answer **no** to the WLED boot preset: the switch has its own boot animation.
+
+**What it shows**, in priority order: a test colour; dark, if the PC switched the bar
+off (until it switches it back on or the machine powers on or off); the PC's frames,
+while they keep coming (each packet holds for its timeout); otherwise a local scene —
+off or a standby glow while the machine is off, a Steam-blue boot animation while it
+starts until the PC takes over, and off, a colour or a rainbow while it runs without
+the PC sending. Changes crossfade.
+
+The WLED part covers the realtime UDP protocols (WARLS, DRGB, DRGBW, DNRGB) and the
+HTTP calls the bridge makes (`/json/info`, `/json/state`, `/win&T=`). These are open on
+the network like WLED's, but only reach the LED bar, and are off unless the bar is
+enabled with *Let the PC control the bar over the network* ticked.
 
 ## Setup mode
 

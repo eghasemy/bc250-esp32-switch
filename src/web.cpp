@@ -5,12 +5,14 @@
 #include <ArduinoJson.h>
 #include <AsyncJson.h>
 #include <ESPAsyncWebServer.h>
+#include <WiFi.h>
 #include <esp_random.h>
 #include "mbedtls/sha256.h"
 
 #include "board.h"
 #include "ble.h"
 #include "config.h"
+#include "leds.h"
 #include "log.h"
 #include "net.h"
 #include "power.h"
@@ -347,6 +349,198 @@ static void handleFinish(AsyncWebServerRequest *req) {
   g_restartAt = millis() + 800;
 }
 
+// --- LED bar ---
+
+// "rrggbb" or "#rrggbb" -> 0xRRGGBB; false if malformed.
+static bool parseColor(const String &s, uint32_t *out) {
+  const char *p = s.c_str();
+  if (*p == '#') p++;
+  if (strlen(p) != 6) return false;
+  for (int i = 0; i < 6; i++) {
+    if (!isxdigit((unsigned char)p[i])) return false;
+  }
+  *out = strtoul(p, nullptr, 16);
+  return true;
+}
+
+static String colorHex(uint32_t c) {
+  char hex[8];
+  snprintf(hex, sizeof(hex), "#%06x", (unsigned)(c & 0xffffff));
+  return String(hex);
+}
+
+static void handleLeds(AsyncWebServerRequest *req) {
+  if (!requireAuth(req)) return;
+  LedConfig c = getLedConfig();
+  JsonDocument doc;
+  JsonObject cfg = doc["config"].to<JsonObject>();
+  cfg["enabled"]    = c.enabled;
+  cfg["count"]      = c.count;
+  cfg["brightness"] = c.brightness;
+  cfg["order"]      = c.order;
+  cfg["network"]    = c.network;
+  cfg["bootAnim"]   = c.bootAnim;
+  cfg["offScene"]   = c.offScene;
+  cfg["offColor"]   = colorHex(c.offColor);
+  cfg["idleScene"]  = c.idleScene;
+  cfg["idleColor"]  = colorHex(c.idleColor);
+  ledsStatusJson(doc["status"].to<JsonObject>());
+  doc["pin"]     = LED_PIN;
+  doc["maxLeds"] = MAX_LEDS;
+  doc["udpPort"] = LED_UDP_PORT;
+  doc["ip"]      = WiFi.localIP().toString();
+  sendJson(req, 200, doc);
+}
+
+// Updates the fields present in the body; the rest keep their values.
+static void handleLedsSave(AsyncWebServerRequest *req, JsonVariant &json) {
+  if (!requireAuth(req)) return;
+  JsonObject o = json.as<JsonObject>();
+  LedConfig c = getLedConfig();
+  if (o["enabled"].is<bool>())  c.enabled  = o["enabled"];
+  if (o["network"].is<bool>())  c.network  = o["network"];
+  if (o["bootAnim"].is<bool>()) c.bootAnim = o["bootAnim"];
+  if (!o["count"].isNull()) {
+    int n = o["count"] | 0;
+    if (n < 1 || n > MAX_LEDS) { sendJsonError(req, 400, "LED count must be 1-64"); return; }
+    c.count = n;
+  }
+  if (!o["brightness"].isNull()) {
+    int b = o["brightness"] | 0;
+    if (b < 1 || b > 255) { sendJsonError(req, 400, "brightness must be 1-255"); return; }
+    c.brightness = b;
+  }
+  if (!o["order"].isNull()) {
+    int v = o["order"] | -1;
+    if (v < 0 || v >= LED_ORDER_COUNT) { sendJsonError(req, 400, "unknown colour order"); return; }
+    c.order = v;
+  }
+  if (!o["offScene"].isNull()) {
+    int v = o["offScene"] | -1;
+    if (v != SCENE_OFF && v != SCENE_COLOR) { sendJsonError(req, 400, "unknown standby scene"); return; }
+    c.offScene = v;
+  }
+  if (!o["idleScene"].isNull()) {
+    int v = o["idleScene"] | -1;
+    if (v < SCENE_OFF || v > SCENE_RAINBOW) { sendJsonError(req, 400, "unknown idle scene"); return; }
+    c.idleScene = v;
+  }
+  if (!o["offColor"].isNull() && !parseColor(o["offColor"] | "", &c.offColor)) {
+    sendJsonError(req, 400, "colours are #rrggbb");
+    return;
+  }
+  if (!o["idleColor"].isNull() && !parseColor(o["idleColor"] | "", &c.idleColor)) {
+    sendJsonError(req, 400, "colours are #rrggbb");
+    return;
+  }
+  setLedConfig(c);
+  ledsConfigChanged();
+  sendOk(req);
+}
+
+static void handleLedsTest(AsyncWebServerRequest *req, JsonVariant &json) {
+  if (!requireAuth(req)) return;
+  uint32_t color;
+  if (!parseColor(json["color"] | "", &color)) {
+    sendJsonError(req, 400, "colours are #rrggbb");
+    return;
+  }
+  if (!getLedConfig().enabled) { sendJsonError(req, 409, "the LED bar is disabled"); return; }
+  ledsTest(color);
+  sendOk(req);
+}
+
+// --- WLED compatibility ---
+// Just enough of WLED's HTTP API for the PC bridge (steamos-led-wled): its
+// installer finds the device through /json/info, and it switches the bar on and
+// off with /win&T=. Open like WLED itself, but it only reaches the LED bar, and
+// only while the bar is enabled with network control on.
+
+static bool wledEnabled(AsyncWebServerRequest *req) {
+  LedConfig c = getLedConfig();
+  if (c.enabled && c.network) return true;
+  sendJsonError(req, 404, "not found");
+  return false;
+}
+
+static void wledState(JsonObject out) {
+  out["on"]   = ledsWledOn();
+  out["bri"]  = getLedConfig().brightness;
+  out["live"] = ledsStreaming();
+}
+
+static void wledInfo(JsonObject out) {
+  LedConfig c = getLedConfig();
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  mac.toLowerCase();
+  out["ver"]     = "0.15.0";  // the WLED API level these endpoints follow
+  out["name"]    = "BC250 Switch";
+  out["brand"]   = "WLED";    // what WLED clients look for
+  out["product"] = "BC250 Switch";
+  out["arch"]    = "esp32";
+  out["mac"]     = mac;
+  out["ip"]      = WiFi.localIP().toString();
+  out["udpport"] = LED_UDP_PORT;
+  out["live"]    = ledsStreaming();
+  out["uptime"]  = millis() / 1000;
+  JsonObject leds = out["leds"].to<JsonObject>();
+  leds["count"] = c.count;
+  leds["rgbw"]  = false;
+  leds["fps"]   = ledsStreamFps();
+}
+
+static void handleWledInfo(AsyncWebServerRequest *req) {
+  if (!wledEnabled(req)) return;
+  JsonDocument doc;
+  wledInfo(doc.to<JsonObject>());
+  sendJson(req, 200, doc);
+}
+
+static void handleWledState(AsyncWebServerRequest *req) {
+  if (!wledEnabled(req)) return;
+  JsonDocument doc;
+  wledState(doc.to<JsonObject>());
+  sendJson(req, 200, doc);
+}
+
+static void handleWledAll(AsyncWebServerRequest *req) {
+  if (!wledEnabled(req)) return;
+  JsonDocument doc;
+  wledState(doc["state"].to<JsonObject>());
+  wledInfo(doc["info"].to<JsonObject>());
+  sendJson(req, 200, doc);
+}
+
+// POST /json/state {"on": true|false|"t"}. Other fields are accepted and ignored.
+static void handleWledSetState(AsyncWebServerRequest *req, JsonVariant &json) {
+  if (!wledEnabled(req)) return;
+  JsonVariant on = json["on"];
+  if (on.is<bool>()) {
+    ledsSetWledOn(on.as<bool>() ? 1 : 0);
+  } else if (on.is<const char *>() && strcmp(on.as<const char *>(), "t") == 0) {
+    ledsSetWledOn(2);
+  }
+  JsonDocument doc;
+  wledState(doc.to<JsonObject>());
+  sendJson(req, 200, doc);
+}
+
+// /win&T=0|1|2 (WLED's legacy API puts parameters after '&' with no '?').
+// Other /win parameters are accepted and ignored.
+static void handleWin(AsyncWebServerRequest *req) {
+  if (!wledEnabled(req)) return;
+  String t;
+  if (req->hasParam("T")) {
+    t = req->getParam("T")->value();
+  } else {
+    int i = req->url().indexOf("&T=");
+    if (i >= 0) t = req->url().substring(i + 3, i + 4);
+  }
+  if (t == "0" || t == "1" || t == "2") ledsSetWledOn(t.toInt());
+  req->send(200, "text/xml", ledsWledOn() ? "<vs><ac>255</ac></vs>" : "<vs><ac>0</ac></vs>");
+}
+
 // --- Lifecycle ---
 
 void webBegin(bool setupMode) {
@@ -370,10 +564,22 @@ void webBegin(bool setupMode) {
   server.addHandler(new AsyncCallbackJsonWebHandler("/api/controllers/remove", handleControllerRemove));
   server.addHandler(new AsyncCallbackJsonWebHandler("/api/controllers/rename", handleControllerRename));
   server.addHandler(new AsyncCallbackJsonWebHandler("/api/wifi", handleWifi));
+  server.on("/api/leds", HTTP_GET, handleLeds);
+  server.addHandler(new AsyncCallbackJsonWebHandler("/api/leds/test", handleLedsTest));
+  server.addHandler(new AsyncCallbackJsonWebHandler("/api/leds", handleLedsSave));
+
+  // WLED compatibility. More specific paths first: a handler for "/json" also
+  // matches "/json/...".
+  server.on("/json/info", HTTP_GET, handleWledInfo);
+  server.on("/json/state", HTTP_GET, handleWledState);
+  server.addHandler(new AsyncCallbackJsonWebHandler("/json/state", handleWledSetState));
+  server.on("/json", HTTP_GET, handleWledAll);
 
   server.on("/", HTTP_GET, serveIndex);
   server.onNotFound([](AsyncWebServerRequest *req) {
-    if (req->url().startsWith("/api/")) {
+    if (req->url().startsWith("/win")) {
+      handleWin(req);
+    } else if (req->url().startsWith("/api/")) {
       sendJsonError(req, 404, "not found");
     } else {
       serveIndex(req);  // captive-portal catch-all
