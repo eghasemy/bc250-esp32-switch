@@ -82,10 +82,18 @@
     label { display:block; font-size:13px; font-weight:600; margin:16px 0 7px; }
     .lab { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:16px 0 7px; }
     .lab label { margin:0; }
-    input[type=text], input[type=password], input:not([type]) {
+    input[type=text], input[type=password], input[type=number], input:not([type]), select {
       width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--line);
       background:var(--field); color:var(--fg); font:inherit; font-size:15px; outline:none; }
-    input:focus { border-color:var(--blue-2); box-shadow:0 0 0 3px rgba(76,145,255,.18); }
+    select { appearance:none; padding-right:36px; cursor:pointer;
+             background:var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%238695a8' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m1 1.5 5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center; }
+    input:focus, select:focus { border-color:var(--blue-2); box-shadow:0 0 0 3px rgba(76,145,255,.18); }
+    input[type=color] { width:52px; height:46px; flex:none; padding:4px; border-radius:10px; cursor:pointer;
+                        border:1px solid var(--line); background:var(--field); }
+    input[type=color]::-webkit-color-swatch-wrapper { padding:0; }
+    input[type=color]::-webkit-color-swatch { border:none; border-radius:7px; }
+    input[type=color]::-moz-color-swatch { border:none; border-radius:7px; }
+    input[type=range] { width:100%; margin:6px 0 0; accent-color:var(--blue-2); }
     input::placeholder { color:#5d6b7e; }
     .check { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:13px; color:#c4cfdc; }
     .check input { width:16px; height:16px; accent-color:var(--blue-2); }
@@ -146,6 +154,27 @@
     .log div { white-space:pre-wrap; word-break:break-word; }
     .log span { color:var(--muted); }
 
+    /* Page tabs */
+    nav.tabs { display:flex; gap:4px; margin:-4px 0 18px; border-bottom:1px solid var(--line); }
+    nav.tabs a { display:flex; align-items:center; gap:8px; padding:10px 14px; margin-bottom:-1px;
+                 color:var(--muted); font-weight:600; text-decoration:none; border-bottom:2px solid transparent; }
+    nav.tabs a svg.i { width:16px; height:16px; }
+    nav.tabs a.on { color:var(--fg); border-bottom-color:var(--blue); }
+
+    /* LED bar */
+    .strip { display:flex; flex-wrap:wrap; gap:5px; margin-top:16px; padding:12px; border-radius:12px;
+             background:#05080d; border:1px solid var(--line); }
+    .strip i { flex:1 0 10px; height:22px; border-radius:5px; background:#111a26; transition:background .2s, box-shadow .2s; }
+    .strip .muted { padding:2px 4px; font-size:13px; }
+    .pick { display:flex; gap:10px; }
+    .pick select { flex:1; min-width:0; }
+    .testrow { display:flex; gap:10px; align-items:center; }
+    .kv { display:grid; gap:8px; margin-top:16px; }
+    .kv div { display:flex; justify-content:space-between; align-items:center; gap:12px; min-width:0;
+              background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+    .kv span { color:var(--muted); font-size:13px; white-space:nowrap; }
+    .kv b { font-family:var(--mono); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
     .banner { border:1px solid #284d84; background:linear-gradient(140deg, #13284a, var(--surface) 75%);
               border-radius:var(--radius); padding:18px 20px; margin-bottom:16px; }
     .banner b { display:block; font-size:15px; margin-bottom:4px; }
@@ -193,6 +222,10 @@
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
     <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="m7 9.5 3 2.5-3 2.5M12.5 15H17"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-led" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="4" rx="2"/><path d="M6 6.5 5 5M12 6V4M18 6.5 19 5M6 17.5 5 19M12 18v2M18 17.5l1 1.5"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
   </svg>
 
   <div class="wrap">
@@ -232,6 +265,11 @@
         <div class="live" id="live"><i></i><span>Live</span></div>
       </header>
 
+      <nav class="tabs">
+        <a href="#" id="tab-dash"><svg class="i"><use href="#i-grid"/></svg>Dashboard</a>
+        <a href="#leds" id="tab-leds"><svg class="i"><use href="#i-led"/></svg>LED bar</a>
+      </nav>
+
       <div class="banner hidden" id="setup-banner">
         <b>Setup mode</b>
         <div class="muted">The PSU stays off while you're here. Bind controllers and set the
@@ -240,6 +278,7 @@
         <div class="msg" id="finish-msg"></div>
       </div>
 
+      <div id="page-dash">
       <div class="tiles">
         <div class="tile hero">
           <div class="k"><svg class="i"><use href="#i-power"/></svg>System power</div>
@@ -370,6 +409,104 @@
           <div class="log" id="log"></div>
         </div>
       </div>
+      </div>
+
+      <!-- LED bar -->
+      <div class="hidden" id="page-leds">
+        <div class="grid">
+          <div class="col">
+            <div class="card">
+              <div class="card-h">
+                <div class="t">
+                  <h2><svg class="i"><use href="#i-led"/></svg>LED bar
+                    <span class="pill" id="led-pill">–</span></h2>
+                  <p id="led-hint">–</p>
+                </div>
+              </div>
+              <div class="strip" id="led-strip"></div>
+              <div class="facts">
+                <div class="fact"><div>Showing</div><b id="lf-src">–</b></div>
+                <div class="fact"><div>From PC</div><b id="lf-pc">–</b></div>
+                <div class="fact"><div>Frame rate</div><b id="lf-fps">–</b></div>
+                <div class="fact"><div>Data pin</div><b id="lf-pin">–</b></div>
+              </div>
+              <label for="test-color">Test colour</label>
+              <div class="testrow">
+                <input type="color" id="test-color" value="#ffffff" />
+                <button class="btn-2" id="test-btn">Light up for 5 s</button>
+              </div>
+              <div class="msg" id="test-msg"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-h">
+                <div class="t">
+                  <h2><svg class="i"><use href="#i-sliders"/></svg>Behaviour</h2>
+                  <p>What the bar shows when the PC isn't driving it</p>
+                </div>
+              </div>
+              <label for="off-scene">While the machine is off</label>
+              <div class="pick">
+                <select id="off-scene"><option value="0">Off</option><option value="1">Glow</option></select>
+                <input type="color" id="off-color" aria-label="Glow colour" />
+              </div>
+              <label class="check"><input type="checkbox" id="boot-anim" />Boot animation while the machine starts, until the PC takes over</label>
+              <label for="idle-scene">While running, if the PC isn't sending</label>
+              <div class="pick">
+                <select id="idle-scene"><option value="0">Off</option><option value="1">Colour</option><option value="2">Rainbow</option></select>
+                <input type="color" id="idle-color" aria-label="Idle colour" />
+              </div>
+              <button class="btn full" id="beh-btn">Save behaviour</button>
+              <div class="msg" id="beh-msg"></div>
+            </div>
+          </div>
+
+          <div class="col">
+            <div class="card">
+              <div class="card-h">
+                <div class="t">
+                  <h2><svg class="i"><use href="#i-led"/></svg>Strip</h2>
+                  <p id="strip-sub">WS2812 / NeoPixel</p>
+                </div>
+              </div>
+              <label class="check"><input type="checkbox" id="led-en" />Drive the LED bar</label>
+              <label for="led-count">Number of LEDs</label>
+              <input type="number" id="led-count" min="1" max="64" inputmode="numeric" />
+              <label for="led-order">Colour order</label>
+              <select id="led-order">
+                <option value="0">GRB (WS2812B)</option><option value="1">RGB</option><option value="2">BRG</option>
+                <option value="3">RBG</option><option value="4">GBR</option><option value="5">BGR</option>
+              </select>
+              <div class="lab"><label for="led-bri">Maximum brightness</label><span class="pill" id="bri-val">–</span></div>
+              <input type="range" id="led-bri" min="1" max="255" />
+              <div class="hint">Caps everything the bar shows, including what the PC sends. At full white each LED
+                draws up to 60 mA from the strip's 5 V supply.</div>
+              <button class="btn full" id="strip-btn">Save strip settings</button>
+              <div class="msg" id="strip-msg"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-h">
+                <div class="t">
+                  <h2><svg class="i"><use href="#i-monitor"/></svg>PC connection</h2>
+                  <p>WLED-compatible, for steamos-led-wled on the BC250</p>
+                </div>
+                <span class="pill" id="pc-pill">–</span>
+              </div>
+              <label class="check"><input type="checkbox" id="led-net" />Let the PC control the bar over the network</label>
+              <div class="kv">
+                <div><span>WLED IP address</span><b id="pc-host">–</b></div>
+                <div><span>UDP port</span><b id="pc-port">–</b></div>
+                <div><span>LED count</span><b id="pc-count">–</b></div>
+              </div>
+              <div class="hint">Give the steamos-led-wled installer these values. Use the IP address rather than
+                the .local name, and reserve it in your router. When the installer offers a WLED boot preset,
+                answer no: the switch plays its own boot animation.</div>
+              <div class="msg" id="net-msg"></div>
+            </div>
+          </div>
+        </div>
+      </div>
       <footer id="footer"></footer>
     </div>
   </div>
@@ -384,6 +521,9 @@
     let timers = [];
     let armedOff = 0;    // Force off needs a second tap within a few seconds
     let lastOk = 0;      // time of the last successful status poll
+    let leds = null;     // last /api/leds answer
+    let ledTimer = null; // polls /api/leds while the LED page is open
+    let ledFirst = true; // fill the LED forms from the next poll
 
     function store(k, v) {
       try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {}
@@ -487,7 +627,12 @@
     };
 
     // --- Dashboard ---
-    function stopTimers() { timers.forEach(clearInterval); timers = []; }
+    function stopTimers() {
+      timers.forEach(clearInterval);
+      timers = [];
+      clearInterval(ledTimer);
+      ledTimer = null;
+    }
 
     function startMain() {
       show("main");
@@ -500,7 +645,25 @@
       timers.push(setInterval(refresh, 1500));
       timers.push(setInterval(pollLog, 3000));
       timers.push(setInterval(renderLive, 1000));
+      route();
     }
+
+    // --- Pages ---
+    function route() {
+      const page = location.hash === "#leds" ? "leds" : "dash";
+      $("page-dash").classList.toggle("hidden", page !== "dash");
+      $("page-leds").classList.toggle("hidden", page !== "leds");
+      $("tab-dash").classList.toggle("on", page === "dash");
+      $("tab-leds").classList.toggle("on", page === "leds");
+      clearInterval(ledTimer);
+      ledTimer = null;
+      if (page === "leds" && token) {
+        ledFirst = true;
+        pollLeds();
+        ledTimer = setInterval(pollLeds, 1000);
+      }
+    }
+    window.onhashchange = route;
 
     function renderLive() {
       const live = $("live");
@@ -825,6 +988,129 @@
         return row;
       }));
     }
+
+    // --- LED bar ---
+    // [label, pill colour, explanation] per status.source
+    const LED_SOURCES = {
+      disabled: ["Disabled", "", "Turn on “Drive the LED bar” under Strip."],
+      setup: ["Setup mode", "blue", "The bar stays dark while the switch is in setup mode."],
+      test: ["Test", "amber", "Showing the test colour."],
+      dark: ["Off by PC", "", "The PC switched the bar off. It comes back when the PC switches it on, or when the machine powers on or off."],
+      pc: ["From PC", "green", "Showing what the PC sends."],
+      off: ["Off", "", "The machine is off."],
+      standby: ["Glow", "blue", "The machine is off: showing the standby glow."],
+      boot: ["Boot", "blue", "The machine is starting. The animation runs until the PC takes over."],
+      idle: ["Idle", "", "Running, but the PC isn't sending."],
+    };
+
+    async function pollLeds() {
+      try { leds = await api("/api/leds"); } catch (e) { return; }
+      const c = leds.config, s = leds.status;
+      const src = LED_SOURCES[s.source] || [s.source, "", ""];
+      setPill("led-pill", src[0], src[1]);
+      $("led-hint").textContent = src[2];
+      $("lf-src").textContent = src[0];
+      $("lf-pc").textContent = !c.network ? "Off" : s.stream.active ? s.stream.from
+        : s.stream.from ? ago(s.stream.ago) + " ago" : "Never";
+      $("lf-fps").textContent = s.stream.active ? s.stream.fps + " fps" : "–";
+      $("lf-pin").textContent = "GPIO" + leds.pin;
+      $("strip-sub").textContent = "WS2812 / NeoPixel, data on GPIO" + leds.pin;
+      renderStrip(s.pixels, c.enabled);
+
+      const pc = !c.enabled ? ["Bar disabled", ""] : !c.network ? ["Off", ""]
+        : s.stream.active ? ["Receiving", "green"] : ["Waiting", ""];
+      setPill("pc-pill", pc[0], pc[1]);
+      $("pc-host").textContent = leds.ip && leds.ip !== "0.0.0.0" ? leds.ip : "Not on your WiFi yet";
+      $("pc-port").textContent = leds.udpPort;
+      $("pc-count").textContent = c.count;
+      $("test-btn").disabled = !c.enabled;
+      if (ledFirst) {
+        ledFirst = false;
+        fillLedForms(c);
+      }
+    }
+
+    function renderStrip(pixels, enabled) {
+      const box = $("led-strip");
+      if (!pixels.length) {
+        box.replaceChildren(el("div", "muted", enabled ? "Starting…" : "The bar is disabled."));
+        return;
+      }
+      if (box.children.length !== pixels.length || box.firstChild.tagName !== "I") {
+        box.replaceChildren(...pixels.map(() => el("i")));
+      }
+      pixels.forEach((hex, i) => {
+        const lit = hex !== "000000";
+        box.children[i].style.background = lit ? "#" + hex : "";
+        box.children[i].style.boxShadow = lit ? "0 0 12px #" + hex + "99" : "";
+      });
+    }
+
+    function fillLedForms(c) {
+      $("led-en").checked = c.enabled;
+      $("led-count").value = c.count;
+      $("led-count").max = leds.maxLeds;
+      $("led-order").value = c.order;
+      $("led-bri").value = c.brightness;
+      $("off-scene").value = c.offScene;
+      $("off-color").value = c.offColor;
+      $("boot-anim").checked = c.bootAnim;
+      $("idle-scene").value = c.idleScene;
+      $("idle-color").value = c.idleColor;
+      $("led-net").checked = c.network;
+      showBrightness();
+      showPickers();
+    }
+
+    function showBrightness() {
+      $("bri-val").textContent = Math.round($("led-bri").value / 255 * 100) + "%";
+    }
+    function showPickers() {
+      $("off-color").classList.toggle("hidden", $("off-scene").value !== "1");
+      $("idle-color").classList.toggle("hidden", $("idle-scene").value !== "1");
+    }
+    $("led-bri").oninput = showBrightness;
+    $("off-scene").onchange = $("idle-scene").onchange = showPickers;
+
+    async function saveLeds(body, btnId, msgId, okText) {
+      setMsg(msgId, "");
+      if (btnId) $(btnId).disabled = true;
+      try {
+        await api("/api/leds", "POST", body);
+        setMsg(msgId, okText, "ok");
+        pollLeds();
+      } catch (e) {
+        setMsg(msgId, e.message, "err");
+      } finally {
+        if (btnId) $(btnId).disabled = false;
+      }
+    }
+
+    $("strip-btn").onclick = () => {
+      if (!leds) return;
+      const count = parseInt($("led-count").value, 10);
+      if (!(count >= 1 && count <= leds.maxLeds)) return setMsg("strip-msg", "Between 1 and " + leds.maxLeds + " LEDs.", "err");
+      saveLeds({ enabled: $("led-en").checked, count, order: +$("led-order").value, brightness: +$("led-bri").value },
+               "strip-btn", "strip-msg", "Saved.");
+    };
+
+    $("beh-btn").onclick = () => saveLeds({
+      offScene: +$("off-scene").value, offColor: $("off-color").value, bootAnim: $("boot-anim").checked,
+      idleScene: +$("idle-scene").value, idleColor: $("idle-color").value,
+    }, "beh-btn", "beh-msg", "Saved.");
+
+    $("led-net").onchange = () => saveLeds({ network: $("led-net").checked }, null, "net-msg",
+      $("led-net").checked ? "The PC can drive the bar." : "Network control is off.");
+
+    $("test-btn").onclick = async () => {
+      setMsg("test-msg", "");
+      try {
+        await api("/api/leds/test", "POST", { color: $("test-color").value });
+        pollLeds();
+      } catch (e) {
+        setMsg("test-msg", e.message, "err");
+      }
+    };
 
     // --- Setup finish ---
     $("finish-btn").onclick = async () => {
