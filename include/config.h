@@ -10,6 +10,9 @@
 //   wifiSsid    - router network to join in normal mode ("" => none, AP only).
 //   wifiPass    - router password ("" => open network).
 //   leds        - LED bar settings (LedConfig below, see leds.h).
+//   ledSig      - LED status lights and standby brightness (LedSignals below).
+//   pins        - GPIO assignment (PinConfig below, see pins.h). Read once at
+//                 boot; a change takes effect after a restart.
 //
 // Written from the web server task and read from loop(), so every access goes
 // through the accessors below, which hold a mutex.
@@ -65,3 +68,39 @@ struct LedConfig {
 
 LedConfig getLedConfig();
 void      setLedConfig(const LedConfig &c);
+
+// Status lights: the bar showing what the switch itself is doing. Stored apart
+// from LedConfig so adding them kept existing LED settings.
+enum LedSignalId : uint8_t {
+  SIG_WAKE,       // a bound controller woke the machine
+  SIG_STARTING,   // PSU on, waiting for the board to come up
+  SIG_SHUTDOWN,   // the machine just powered off
+  SIG_BOOT_FAIL,  // the board never came up
+  SIG_FORCE_OFF,  // button held to force the machine off
+  SIG_SETUP,      // button held to enter or leave setup mode, and setup mode itself
+  SIG_PAIRING,    // looking for controllers to bind
+  SIG_WIFI,       // the router is configured but out of reach
+  SIG_COUNT,
+};
+
+struct LedSignals {
+  uint8_t  standbyBrightness;  // output cap while the machine is off, 1..255
+  bool     on[SIG_COUNT];
+  uint32_t color[SIG_COUNT];   // 0xRRGGBB
+};
+
+LedSignals getLedSignals();
+void       setLedSignals(const LedSignals &s);
+
+// GPIO numbers; buttonGnd is -1 when the switch's second terminal goes
+// straight to GND.
+struct PinConfig {
+  int8_t psOn;
+  int8_t sense;
+  int8_t button;
+  int8_t buttonGnd;
+  int8_t led;
+};
+
+PinConfig getPins();
+void      setPins(const PinConfig &p);

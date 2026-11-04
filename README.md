@@ -18,7 +18,9 @@ button — plus optional "turn on when I pick up my controller" via Bluetooth.
 - **LED bar** (optional): drives a WS2812 strip that mirrors Steam's Game Mode LED
   settings from the PC (WLED-compatible, for
   [steamos-led-wled](https://github.com/rpf16rj/steamos-led-wled)), with boot and
-  standby lighting that follows the power state.
+  standby lighting that follows the power state, and status lights for what the switch
+  itself is doing (button holds, controller wake, boot progress, shutdown, failures).
+- **Configurable pins**: every GPIO can be moved from the web UI.
 
 ## Board targets
 
@@ -38,6 +40,9 @@ working.
 The ESP32 module is permanently powered from the ATX connector's **5 V standby**,
 so it runs whether the machine is on or off. Share a common ground between the ESP,
 the PSU, and the board.
+
+The tables below are the default pins. Each one can be moved to another GPIO from the
+web UI's **Pins** card (see [Web UI](#web-ui)).
 
 ### ESP32-WROOM-32 wiring (default)
 
@@ -145,6 +150,11 @@ In normal operation the switch joins your router and serves the web UI at
   controller* runs a 30 s Bluetooth scan to pick from, or takes a MAC address.
 - **WiFi**: the router to join (2.4 GHz only). Saving reconnects right away.
 - **Password** change, and the last 40 events.
+- **Pins**: which GPIO does each job. Only pins that are safe for the job on that chip are
+  offered: no flash, strapping or serial pins, and an ADC1 pin for `TPMS1`. The button's
+  second terminal can also go straight to GND. Saving restarts the switch, so it's only
+  allowed while the machine is off (a restart releases `PS_ON#`). Move the wires with the
+  PSU unplugged first: a wrong `PS_ON#` or `TPMS1` pin can switch the PSU unexpectedly.
 
 Everything needs the password. Sessions last until you sign out, 7 days of inactivity,
 or a restart of the switch.
@@ -183,6 +193,23 @@ while they keep coming (each packet holds for its timeout); otherwise a local sc
 off or a standby glow while the machine is off, a Steam-blue boot animation while it
 starts until the PC takes over, and off, a colour or a rainbow while it runs without
 the PC sending. Changes crossfade.
+
+**Status lights** show what the switch itself is doing, over the PC's frames and the
+scenes. Each can be turned off or recoloured on the LED bar page:
+
+| Light | When |
+|-------|------|
+| Controller wake | A sweep across the bar as a controller turns the machine on |
+| Starting | Fills while waiting for the board to come up, then flashes full |
+| Power off | Fades out once the machine is off, so you know it's down |
+| Boot failed | Slow red pulses for a minute when the board never came up |
+| Force-off hold | Fills while the button is held, forcing the machine off when full |
+| Setup mode | Fills while the button is held for setup mode; a sweeping dot while in it |
+| Looking for controllers | Breathes while a controller scan from the web UI runs |
+| WiFi lost | The end LEDs pulse while the router can't be reached (over the local scenes only) |
+
+Holds only show once they're longer than a tap. While the machine is off (or in setup
+mode) the bar is capped at a separate, lower **standby brightness**.
 
 The WLED part covers the realtime UDP protocols (WARLS, DRGB, DRGBW, DNRGB) and the
 HTTP calls the bridge makes (`/json/info`, `/json/state`, `/win&T=`). These are open on

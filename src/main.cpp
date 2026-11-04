@@ -6,6 +6,7 @@
 #include "leds.h"
 #include "log.h"
 #include "net.h"
+#include "pins.h"
 #include "power.h"
 #include "web.h"
 
@@ -38,6 +39,7 @@ enum PowerState {
 
 static PowerState state = STATE_OFF;
 static bool       g_setupMode = false;
+static PinConfig  pins;  // read once at boot (see pins.h)
 
 // --- Button debounce / press tracking ---
 static bool          buttonStable      = false;  // debounced "pressed" level
@@ -47,6 +49,11 @@ static unsigned long pressStart        = 0;
 static bool          pressStartedOff   = false;  // press began while OFF
 static bool          longPressFired    = false;
 static bool          setupFired        = false;
+
+// --- Setup-mode button (hold to leave) ---
+static unsigned long setupPressStart = 0;
+static bool          setupWasDown    = false;
+static bool          setupArmed      = false;
 
 // --- Board-sense debounce ---
 static bool          boardSenseStable  = false;  // debounced TPMS1 HIGH
@@ -96,7 +103,7 @@ static bool readBoardSense(uint32_t *outMv = nullptr) {
   // the board-off debounce, stalling shutdown detection (see SENSE_OVERSAMPLE).
   uint32_t mv = UINT32_MAX;
   for (int i = 0; i < SENSE_OVERSAMPLE; i++) {
-    mv = min(mv, analogReadMilliVolts(BOARD_SENSE));
+    mv = min(mv, analogReadMilliVolts(pins.sense));
   }
   if (outMv) *outMv = mv;
   if (senseLevel) {
@@ -108,12 +115,12 @@ static bool readBoardSense(uint32_t *outMv = nullptr) {
 }
 
 static void psuOn() {
-  digitalWrite(PS_ON_PIN, PS_ON_ASSERT);
+  digitalWrite(pins.psOn, PS_ON_ASSERT);
   logEvent("[PSU ] PS_ON# asserted (LOW) -> PSU ON");
 }
 
 static void psuOff() {
-  digitalWrite(PS_ON_PIN, PS_ON_RELEASE);
+  digitalWrite(pins.psOn, PS_ON_RELEASE);
   logEvent("[PSU ] PS_ON# released (high-Z) -> PSU OFF");
 }
 
@@ -136,6 +143,7 @@ static void powerOn(const char *reason, unsigned long now) {
 // the same single-clock-per-loop reason as powerOn().
 static void powerOff(const char *reason, unsigned long now) {
   logEvent("[ACT ] %s -> powering off", reason);
+  ledsEvent(LedEvent::ShutDown, now);
   psuOff();
   bleInhibitUntil = now + BLE_WAKE_COOLDOWN_MS;
   setState(STATE_OFF);
@@ -174,6 +182,53 @@ static LedPower ledPower() {
   }
 }
 
+// How far a hold of `held` ms is towards its action at `total` ms, counted
+// from `showAfter` so a tap doesn't flash the bar. Negative = not yet.
+static float holdProgress(unsigned long held, unsigned long showAfter,
+                          unsigned long total) {
+  if (held < showAfter) return -1;
+  return (held - showAfter) / (float)(total - showAfter);
+}
+
+static LedInputs ledInputs(unsigned long now) {
+  LedInputs in = {ledPower(), LedHold::None, 0, false, false};
+  float p = -1;
+  LedHold hold = LedHold::None;
+  if (g_setupMode) {
+    if (setupArmed && setupWasDown) {
+      hold = LedHold::Setup;
+      p = holdProgress(now - setupPressStart, LED_SETUP_SHOW_MS, SETUP_HOLD_MS);
+    }
+  } else if (buttonStable) {
+    unsigned long held = now - pressStart;
+    if (!pressStartedOff && state == STATE_ON && !longPressFired) {
+      hold = LedHold::ForceOff;
+      p = holdProgress(held, LED_FORCE_OFF_SHOW_MS, LONG_PRESS_MS);
+    } else if (pressStartedOff && state == STATE_OFF && !setupFired) {
+      hold = LedHold::Setup;
+      p = holdProgress(held, LED_SETUP_SHOW_MS, SETUP_HOLD_MS);
+    }
+  }
+  if (p >= 0) {
+    in.hold = hold;
+    in.holdProgress = min(p, 1.0f);
+  }
+  in.pairing  = !g_setupMode && bleDiscovering();
+  in.wifiLost = netRouterLost(now);
+  return in;
+}
+
+// PS_ON# open-drain and released, so the PSU stays off; the button readable.
+static void initPins() {
+  pinMode(pins.psOn, OUTPUT_OPEN_DRAIN);
+  digitalWrite(pins.psOn, PS_ON_RELEASE);
+  if (pins.buttonGnd >= 0) {
+    pinMode(pins.buttonGnd, OUTPUT);
+    digitalWrite(pins.buttonGnd, LOW);
+  }
+  pinMode(pins.button, INPUT_PULLUP);
+}
+
 // --- power.h ---
 
 PowerStatus powerStatus() {
@@ -206,36 +261,29 @@ static void setupBegin() {
   Serial.println("=== BC250 PSU controller : SETUP MODE ===");
 
   // Keep the PSU off and the button readable while configuring.
-  pinMode(PS_ON_PIN, OUTPUT_OPEN_DRAIN);
-  digitalWrite(PS_ON_PIN, PS_ON_RELEASE);
-  pinMode(BUTTON_GND, OUTPUT);
-  digitalWrite(BUTTON_GND, LOW);
-  pinMode(BUTTON_SENSE, INPUT_PULLUP);
+  initPins();
 }
 
 static void setupLoop(unsigned long now) {
   // Button held in setup mode = escape back to normal mode.
   // Only armed after the button has been seen released: the hold that entered
   // setup mode is usually still down at boot and must not count as an exit.
-  static unsigned long pressStart = 0;
-  static bool wasDown = false;
-  static bool armed = false;
-  bool down = (digitalRead(BUTTON_SENSE) == LOW);
+  bool down = (digitalRead(pins.button) == LOW);
   pubButtonDown = down;
   if (!down) {
-    armed = true;
+    setupArmed = true;
   }
-  if (!armed) {
+  if (!setupArmed) {
     // Ignore the entry hold until it is released.
-  } else if (down && !wasDown) {
-    pressStart = now;
-  } else if (down && (now - pressStart) >= SETUP_HOLD_MS) {
+  } else if (down && !setupWasDown) {
+    setupPressStart = now;
+  } else if (down && (now - setupPressStart) >= SETUP_HOLD_MS) {
     logEvent("[ACT ] button held, leaving setup mode");
     setForceSetup(false);
     delay(50);
     ESP.restart();
   }
-  wasDown = down;
+  setupWasDown = down;
 }
 
 // --- Normal mode ---
@@ -243,21 +291,20 @@ static void setupLoop(unsigned long now) {
 static void normalBegin() {
   Serial.printf("=== BC250 PSU controller (%s) ===\n", BC250_BOARD_NAME);
 
-  // PS_ON# open-drain, released by default so the PSU stays off at boot.
-  pinMode(PS_ON_PIN, OUTPUT_OPEN_DRAIN);
-  digitalWrite(PS_ON_PIN, PS_ON_RELEASE);
-
-  // Switch: BUTTON_GND = local ground, BUTTON_SENSE = sensed input with pull-up.
-  pinMode(BUTTON_GND, OUTPUT);
-  digitalWrite(BUTTON_GND, LOW);
-  pinMode(BUTTON_SENSE, INPUT_PULLUP);
+  // PS_ON# released so the PSU stays off at boot; the switch's sense pin with
+  // a pull-up, its other terminal on a pin driven LOW (or on GND).
+  initPins();
+  char gnd[8] = "GND";
+  if (pins.buttonGnd >= 0) snprintf(gnd, sizeof(gnd), "GPIO%d", pins.buttonGnd);
+  logEvent("[INIT] pins: PS_ON#=GPIO%d TPMS1=GPIO%d button=GPIO%d/%s LED=GPIO%d",
+           pins.psOn, pins.sense, pins.button, gnd, pins.led);
 
   // TPMS1 sense: read as ADC over the full 0-3.3V range.
   analogSetAttenuation(ADC_11db);
 
   // Seed debounced states from the current levels. The board only counts as up
   // if TPMS1 stays high for BOOT_ADOPT_MS (see there).
-  buttonStable = buttonLastRaw = (digitalRead(BUTTON_SENSE) == LOW);
+  buttonStable = buttonLastRaw = (digitalRead(pins.button) == LOW);
   bool boardUp = readBoardSense();
   for (unsigned long t0 = millis(); boardUp && millis() - t0 < BOOT_ADOPT_MS;) {
     delay(10);
@@ -280,7 +327,7 @@ static void normalBegin() {
 static void normalLoop(unsigned long now) {
   // --- Sample & debounce inputs ---
   uint32_t senseMv;
-  bool buttonRaw = (digitalRead(BUTTON_SENSE) == LOW);   // pressed == LOW
+  bool buttonRaw = (digitalRead(pins.button) == LOW);    // pressed == LOW
   bool boardRaw  = readBoardSense(&senseMv);             // board up (hysteresis)
 
   if (debounce(buttonRaw, &buttonStable, &buttonLastRaw,
@@ -336,6 +383,7 @@ static void normalLoop(unsigned long now) {
   bool blePresent = bleWakePresent(now);
   bool bleInhibited = (int32_t)(bleInhibitUntil - now) > 0;
   if (state == STATE_OFF && blePresent && !bleInhibited) {
+    ledsEvent(LedEvent::ControllerWake, now);
     powerOn("controller present (BLE)", now);
   }
 
@@ -352,6 +400,7 @@ static void normalLoop(unsigned long now) {
         setState(STATE_ON);
       } else if ((now - bootStart) >= BOOT_TIMEOUT_MS) {
         powerOff("boot timed out, board never signalled UP", now);
+        ledsEvent(LedEvent::BootFailed, now);
       }
       break;
 
@@ -399,6 +448,7 @@ void setup() {
   Serial.println();
 
   loadConfig();
+  pins = getPins();
 
   // The portal only starts on an explicit request (8s button hold while OFF).
   // Otherwise we ALWAYS run the normal controller so button control works even
@@ -422,7 +472,7 @@ void loop() {
   } else {
     normalLoop(now);
   }
-  ledsLoop(now, ledPower());
+  ledsLoop(now, ledInputs(now));
   bleLoop(now);
   netLoop(now);
   webLoop(now);

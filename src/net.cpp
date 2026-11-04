@@ -147,6 +147,11 @@ void netStatusJson(JsonObject out) {
   }
 }
 
+bool netRouterLost(unsigned long now) {
+  return !g_setupMode && !ssid.isEmpty() && !staWasConnected &&
+         now - staDownSince >= STA_FALLBACK_MS;
+}
+
 String netSummary() {
   String s;
   if (WiFi.status() == WL_CONNECTED) {

@@ -1,5 +1,6 @@
 #include "config.h"
 #include <Preferences.h>
+#include "pins.h"
 
 static Preferences prefs;
 static const char *NS = "bc250";
@@ -18,6 +19,8 @@ static bool       forceSetup = false;
 static String     wifiSsid;
 static String     wifiPass;
 static LedConfig  leds;
+static LedSignals ledSig;
+static PinConfig  pins;
 
 static const LedConfig LED_DEFAULTS = {
   .enabled    = false,
@@ -31,6 +34,27 @@ static const LedConfig LED_DEFAULTS = {
   .idleScene  = SCENE_OFF,
   .idleColor  = 0x1a9fff,
 };
+
+static const LedSignals SIG_DEFAULTS = {
+  .standbyBrightness = 64,
+  .on = {true, true, true, true, true, true, true, true},
+  .color = {
+    0x1a9fff,  // wake: Steam blue
+    0x1a9fff,  // starting
+    0xff9a3c,  // shutdown: warm amber
+    0xff1a1a,  // boot failed: red
+    0xff2a2a,  // force off hold: red
+    0x9a4dff,  // setup: purple
+    0x2f6bff,  // pairing: blue
+    0xffa000,  // WiFi lost: amber
+  },
+};
+
+// Reads a fixed-size blob; false when it's missing or another layout.
+static bool getBlob(const char *key, void *out, size_t size) {
+  return prefs.isKey(key) && prefs.getBytesLength(key) == size &&
+         prefs.getBytes(key, out, size) == size;
+}
 
 // NVS keys are limited to 15 characters: "c0a"/"c0n" = slot 0 address/name.
 static void slotKeys(int i, char *addrKey, char *nameKey) {
@@ -86,10 +110,11 @@ void loadConfig() {
   }
   // Stored as one blob; a size mismatch (older/newer layout) falls back to
   // defaults.
-  if (!prefs.isKey("leds") || prefs.getBytesLength("leds") != sizeof(leds) ||
-      prefs.getBytes("leds", &leds, sizeof(leds)) != sizeof(leds)) {
-    leds = LED_DEFAULTS;
-  }
+  if (!getBlob("leds", &leds, sizeof(leds))) leds = LED_DEFAULTS;
+  if (!getBlob("ledSig", &ledSig, sizeof(ledSig))) ledSig = SIG_DEFAULTS;
+  // Pins saved for another chip, or otherwise invalid, fall back to the
+  // board profile's.
+  if (!getBlob("pins", &pins, sizeof(pins)) || pinsError(pins)) pins = defaultPins();
   String legacy = getStr("wakeAddr");
   prefs.end();
 
@@ -218,5 +243,31 @@ void setLedConfig(const LedConfig &c) {
   leds = c;
   prefs.begin(NS, false);
   prefs.putBytes("leds", &leds, sizeof(leds));
+  prefs.end();
+}
+
+LedSignals getLedSignals() {
+  Lock lock;
+  return ledSig;
+}
+
+void setLedSignals(const LedSignals &s) {
+  Lock lock;
+  ledSig = s;
+  prefs.begin(NS, false);
+  prefs.putBytes("ledSig", &ledSig, sizeof(ledSig));
+  prefs.end();
+}
+
+PinConfig getPins() {
+  Lock lock;
+  return pins;
+}
+
+void setPins(const PinConfig &p) {
+  Lock lock;
+  pins = p;
+  prefs.begin(NS, false);
+  prefs.putBytes("pins", &pins, sizeof(pins));
   prefs.end();
 }

@@ -15,6 +15,7 @@
 #include "leds.h"
 #include "log.h"
 #include "net.h"
+#include "pins.h"
 #include "power.h"
 
 static const size_t MIN_PASSWORD_LEN = 6;
@@ -369,9 +370,15 @@ static String colorHex(uint32_t c) {
   return String(hex);
 }
 
+// API names of the status lights, by LedSignalId.
+static const char *const SIGNAL_KEYS[SIG_COUNT] = {
+  "wake", "starting", "shutdown", "bootFail", "forceOff", "setup", "pairing", "wifi",
+};
+
 static void handleLeds(AsyncWebServerRequest *req) {
   if (!requireAuth(req)) return;
   LedConfig c = getLedConfig();
+  LedSignals sg = getLedSignals();
   JsonDocument doc;
   JsonObject cfg = doc["config"].to<JsonObject>();
   cfg["enabled"]    = c.enabled;
@@ -384,8 +391,15 @@ static void handleLeds(AsyncWebServerRequest *req) {
   cfg["offColor"]   = colorHex(c.offColor);
   cfg["idleScene"]  = c.idleScene;
   cfg["idleColor"]  = colorHex(c.idleColor);
+  cfg["standbyBrightness"] = sg.standbyBrightness;
+  JsonObject sigs = cfg["signals"].to<JsonObject>();
+  for (int i = 0; i < SIG_COUNT; i++) {
+    JsonObject o = sigs[SIGNAL_KEYS[i]].to<JsonObject>();
+    o["on"]    = sg.on[i];
+    o["color"] = colorHex(sg.color[i]);
+  }
   ledsStatusJson(doc["status"].to<JsonObject>());
-  doc["pin"]     = LED_PIN;
+  doc["pin"]     = getPins().led;
   doc["maxLeds"] = MAX_LEDS;
   doc["udpPort"] = LED_UDP_PORT;
   doc["ip"]      = WiFi.localIP().toString();
@@ -393,10 +407,29 @@ static void handleLeds(AsyncWebServerRequest *req) {
 }
 
 // Updates the fields present in the body; the rest keep their values.
+// "signals" is {key: {on, color}} with any subset of the keys and fields.
 static void handleLedsSave(AsyncWebServerRequest *req, JsonVariant &json) {
   if (!requireAuth(req)) return;
   JsonObject o = json.as<JsonObject>();
   LedConfig c = getLedConfig();
+  LedSignals sg = getLedSignals();
+  if (!o["standbyBrightness"].isNull()) {
+    int b = o["standbyBrightness"] | 0;
+    if (b < 1 || b > 255) { sendJsonError(req, 400, "standby brightness must be 1-255"); return; }
+    sg.standbyBrightness = b;
+  }
+  JsonObject sigs = o["signals"];
+  for (JsonPair kv : sigs) {
+    int i = 0;
+    while (i < SIG_COUNT && strcmp(SIGNAL_KEYS[i], kv.key().c_str()) != 0) i++;
+    if (i == SIG_COUNT) { sendJsonError(req, 400, "unknown status light"); return; }
+    JsonObject so = kv.value();
+    if (so["on"].is<bool>()) sg.on[i] = so["on"];
+    if (!so["color"].isNull() && !parseColor(so["color"] | "", &sg.color[i])) {
+      sendJsonError(req, 400, "colours are #rrggbb");
+      return;
+    }
+  }
   if (o["enabled"].is<bool>())  c.enabled  = o["enabled"];
   if (o["network"].is<bool>())  c.network  = o["network"];
   if (o["bootAnim"].is<bool>()) c.bootAnim = o["bootAnim"];
@@ -434,8 +467,70 @@ static void handleLedsSave(AsyncWebServerRequest *req, JsonVariant &json) {
     return;
   }
   setLedConfig(c);
+  setLedSignals(sg);
   ledsConfigChanged();
   sendOk(req);
+}
+
+// --- Pins ---
+
+static void pinsJson(JsonObject out, const PinConfig &p) {
+  out["psOn"]      = p.psOn;
+  out["sense"]     = p.sense;
+  out["button"]    = p.button;
+  out["buttonGnd"] = p.buttonGnd;
+  out["led"]       = p.led;
+}
+
+// Pins only change with a restart, and a restart releases PS_ON#, which would
+// cut a running machine.
+static bool machineOff() {
+  String st = powerStatus().state;
+  return st == "OFF" || st == "SETUP";
+}
+
+static void handlePins(AsyncWebServerRequest *req) {
+  if (!requireAuth(req)) return;
+  JsonDocument doc;
+  pinsJson(doc["pins"].to<JsonObject>(), getPins());
+  pinsJson(doc["defaults"].to<JsonObject>(), defaultPins());
+  pinOptionsJson(doc["options"].to<JsonObject>());
+  doc["board"]     = BC250_BOARD_NAME;
+  doc["canChange"] = machineOff();
+  sendJson(req, 200, doc);
+}
+
+// {psOn, sense, button, buttonGnd, led} (all of them) or {reset: true}. Saves
+// and restarts.
+static void handlePinsSave(AsyncWebServerRequest *req, JsonVariant &json) {
+  if (!requireAuth(req)) return;
+  if (!machineOff()) {
+    sendJsonError(req, 409, "switch the machine off first: applying pins restarts the switch, which cuts the PSU");
+    return;
+  }
+  JsonObject o = json.as<JsonObject>();
+  PinConfig p = defaultPins();
+  if (!(o["reset"] | false)) {
+    const char *keys[] = {"psOn", "sense", "button", "buttonGnd", "led"};
+    int8_t *fields[] = {&p.psOn, &p.sense, &p.button, &p.buttonGnd, &p.led};
+    for (int i = 0; i < 5; i++) {
+      if (!o[keys[i]].is<int>()) { sendJsonError(req, 400, "every pin is needed"); return; }
+      int v = o[keys[i]];
+      if (v < -1 || v > 48) { sendJsonError(req, 400, "no such GPIO"); return; }
+      *fields[i] = v;
+    }
+  }
+  const char *err = pinsError(p);
+  if (err) { sendJsonError(req, 400, err); return; }
+  PinConfig cur = getPins();
+  if (memcmp(&cur, &p, sizeof(p)) == 0) {
+    sendJsonError(req, 400, "those are the pins in use already");
+    return;
+  }
+  setPins(p);
+  logEvent("[WEB ] pins changed, restarting");
+  sendOk(req);
+  g_restartAt = millis() + 800;
 }
 
 static void handleLedsTest(AsyncWebServerRequest *req, JsonVariant &json) {
@@ -567,6 +662,8 @@ void webBegin(bool setupMode) {
   server.on("/api/leds", HTTP_GET, handleLeds);
   server.addHandler(new AsyncCallbackJsonWebHandler("/api/leds/test", handleLedsTest));
   server.addHandler(new AsyncCallbackJsonWebHandler("/api/leds", handleLedsSave));
+  server.on("/api/pins", HTTP_GET, handlePins);
+  server.addHandler(new AsyncCallbackJsonWebHandler("/api/pins", handlePinsSave));
 
   // WLED compatibility. More specific paths first: a handler for "/json" also
   // matches "/json/...".
