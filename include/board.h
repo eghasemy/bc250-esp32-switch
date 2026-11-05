@@ -1,10 +1,11 @@
 #pragma once
 
-//*******  Pin definitions  ***************
+//*******  Pin defaults  ***************
 //
-// BC250 PSU controller wiring. The two supported board profiles keep the same
-// external behavior but use different GPIOs because the classic ESP32 and the
-// ESP32-C3 have different safe pin sets:
+// BC250 PSU controller wiring. These are the defaults; the web UI can move each
+// job to another GPIO (see pins.h), which takes effect after a restart. The two
+// supported board profiles use different GPIOs because the classic ESP32 and
+// the ESP32-C3 have different safe pin sets:
 //
 //   * ESP32-WROOM-32:
 //       GPIO33 (BUTTON_SENSE)  <-----> momentary switch terminal A
@@ -28,19 +29,19 @@
 
 #if defined(BC250_BOARD_ESP32_WROOM_32)
 const char *const BC250_BOARD_NAME = "ESP32-WROOM-32";
-const int BUTTON_SENSE = 33;
-const int BUTTON_GND   = 25;
-const int PS_ON_PIN    = 27;
-const int BOARD_SENSE  = 34;
-const int LED_PIN      = 26;
+const int8_t DEFAULT_BUTTON_SENSE = 33;
+const int8_t DEFAULT_BUTTON_GND   = 25;
+const int8_t DEFAULT_PS_ON_PIN    = 27;
+const int8_t DEFAULT_BOARD_SENSE  = 34;
+const int8_t DEFAULT_LED_PIN      = 26;
 #define AP_TX_POWER WIFI_POWER_19_5dBm
 #elif defined(BC250_BOARD_ESP32_C3_DEVKITM_1)
 const char *const BC250_BOARD_NAME = "ESP32-C3-DevKitM-1";
-const int BUTTON_SENSE = 5;
-const int BUTTON_GND   = 6;
-const int PS_ON_PIN    = 4;
-const int BOARD_SENSE  = 3;
-const int LED_PIN      = 7;
+const int8_t DEFAULT_BUTTON_SENSE = 5;
+const int8_t DEFAULT_BUTTON_GND   = 6;
+const int8_t DEFAULT_PS_ON_PIN    = 4;
+const int8_t DEFAULT_BOARD_SENSE  = 3;
+const int8_t DEFAULT_LED_PIN      = 7;
 #define AP_TX_POWER WIFI_POWER_8_5dBm
 #else
 #error "Unsupported BC250 board profile. Build one of the configured PlatformIO environments."
@@ -48,7 +49,7 @@ const int LED_PIN      = 7;
 
 // The switch bridges BUTTON_SENSE and BUTTON_GND. BUTTON_GND is driven LOW to
 // act as a local ground, and BUTTON_SENSE is read with an internal pull-up:
-// pressed reads LOW.
+// pressed reads LOW. With no BUTTON_GND pin, the switch goes to GND directly.
 
 // ATX PS_ON# is active LOW and idles at ~5V (pulled up inside the PSU).
 // Driven as OPEN-DRAIN so we never push 3.3V against the PSU's 5V pull-up:
@@ -179,3 +180,12 @@ const unsigned long LED_TEST_MS = 5000;
 
 // The boot animation gives up if the PC hasn't taken over the bar by then.
 const unsigned long LED_BOOT_ANIM_MAX_MS = 120000;
+
+// Status lights (see leds.h).
+const unsigned long LED_WAKE_MS      = 700;    // sweep when a controller wakes the machine
+const unsigned long LED_BOARD_UP_MS  = 400;    // full bar once the board comes up
+const unsigned long LED_SHUTDOWN_MS  = 3000;   // fade out after a power-off
+const unsigned long LED_BOOT_FAIL_MS = 60000;  // red pulses after a failed boot
+// A button hold only shows once it's longer than a tap.
+const unsigned long LED_FORCE_OFF_SHOW_MS = 500;
+const unsigned long LED_SETUP_SHOW_MS     = 1000;

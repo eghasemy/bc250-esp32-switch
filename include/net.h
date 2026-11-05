@@ -19,5 +19,9 @@ void netReconnect();
 // {mode, ssid, staConnected, ip, rssi, apActive, apIp, apClients}
 void netStatusJson(JsonObject out);
 
+// True when a router is configured but hasn't been reachable for
+// STA_FALLBACK_MS (normal mode only).
+bool netRouterLost(unsigned long now);
+
 // Short summary for the serial heartbeat, e.g. "sta 192.168.1.20" or "ap".
 String netSummary();

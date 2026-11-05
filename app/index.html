@@ -174,6 +174,19 @@
               background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
     .kv span { color:var(--muted); font-size:13px; white-space:nowrap; }
     .kv b { font-family:var(--mono); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sigs { margin-top:8px; }
+    .sigs > label { display:flex; align-items:center; gap:12px; margin:0; padding:12px 0;
+                    border-bottom:1px solid var(--line); font-weight:400; cursor:pointer; }
+    .sigs > label:last-child { border-bottom:none; }
+    .sigs input[type=checkbox] { width:16px; height:16px; flex:none; accent-color:var(--blue-2); }
+    .sigs .nm { flex:1; min-width:0; }
+    .sigs .nm b { display:block; font-size:14px; }
+    .sigs .nm small { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+    .sigs input[type=color] { width:44px; height:38px; }
+    .pins { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 12px; }
+    .pins .wide { grid-column:1 / -1; }
+    .btnrow { display:flex; align-items:center; gap:14px; margin-top:18px; flex-wrap:wrap; }
+    .btnrow .btn { flex:1; }
 
     .banner { border:1px solid #284d84; background:linear-gradient(140deg, #13284a, var(--surface) 75%);
               border-radius:var(--radius); padding:18px 20px; margin-bottom:16px; }
@@ -209,6 +222,7 @@
       .rows .found-row .acts { width:auto; }
       .title div { white-space:normal; }
       .auth { margin-top:6vh; }
+      .pins { grid-template-columns:minmax(0,1fr); }
     }
   </style>
 </head>
@@ -225,18 +239,17 @@
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
     <symbol id="i-led" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="4" rx="2"/><path d="M6 6.5 5 5M12 6V4M18 6.5 19 5M6 17.5 5 19M12 18v2M18 17.5l1 1.5"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 6V3M15 6V3M9 21v-3M15 21v-3M6 9H3M6 15H3M21 9h-3M21 15h-3"/></symbol>
     <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
   </svg>
 
   <div class="wrap">
-    <!-- No password yet and not in setup mode -->
+    <!-- The switch didn't answer -->
     <div class="card auth hidden" id="screen-nopass">
       <div class="logo"><svg class="i"><use href="#i-pad"/></svg></div>
-      <h2>Not set up yet</h2>
-      <div class="muted">
-        With the machine off, hold the power button for 8 seconds. The switch restarts into
-        setup mode: join the <b>BC250 Switch Setup</b> WiFi network and create a password there.
-      </div>
+      <h2>Can't reach the switch</h2>
+      <div class="muted"></div>
     </div>
 
     <!-- Create password / sign in -->
@@ -268,6 +281,7 @@
       <nav class="tabs">
         <a href="#" id="tab-dash"><svg class="i"><use href="#i-grid"/></svg>Dashboard</a>
         <a href="#leds" id="tab-leds"><svg class="i"><use href="#i-led"/></svg>LED bar</a>
+        <a href="#pins" id="tab-pins"><svg class="i"><use href="#i-chip"/></svg>Pins</a>
       </nav>
 
       <div class="banner hidden" id="setup-banner">
@@ -428,7 +442,7 @@
                 <div class="fact"><div>Showing</div><b id="lf-src">–</b></div>
                 <div class="fact"><div>From PC</div><b id="lf-pc">–</b></div>
                 <div class="fact"><div>Frame rate</div><b id="lf-fps">–</b></div>
-                <div class="fact"><div>Data pin</div><b id="lf-pin">–</b></div>
+                <div class="fact"><div>Data pin</div><b id="lf-pin" title="Change it under Pins on the dashboard">–</b></div>
               </div>
               <label for="test-color">Test colour</label>
               <div class="testrow">
@@ -459,6 +473,18 @@
               <button class="btn full" id="beh-btn">Save behaviour</button>
               <div class="msg" id="beh-msg"></div>
             </div>
+
+            <div class="card">
+              <div class="card-h">
+                <div class="t">
+                  <h2><svg class="i"><use href="#i-bell"/></svg>Status lights</h2>
+                  <p>The bar shows what the switch is doing, over the PC and the scenes above</p>
+                </div>
+              </div>
+              <div class="sigs" id="sigs"></div>
+              <button class="btn full" id="sig-btn">Save status lights</button>
+              <div class="msg" id="sig-msg"></div>
+            </div>
           </div>
 
           <div class="col">
@@ -481,6 +507,10 @@
               <input type="range" id="led-bri" min="1" max="255" />
               <div class="hint">Caps everything the bar shows, including what the PC sends. At full white each LED
                 draws up to 60 mA from the strip's 5 V supply.</div>
+              <div class="lab"><label for="led-sbri">Brightness while the machine is off</label><span class="pill" id="sbri-val">–</span></div>
+              <input type="range" id="led-sbri" min="1" max="255" />
+              <div class="hint">A lower cap for the standby glow and the status lights while the machine is off
+                or in setup mode. It never goes above the maximum.</div>
               <button class="btn full" id="strip-btn">Save strip settings</button>
               <div class="msg" id="strip-msg"></div>
             </div>
@@ -503,6 +533,58 @@
                 the .local name, and reserve it in your router. When the installer offers a WLED boot preset,
                 answer no: the switch plays its own boot animation.</div>
               <div class="msg" id="net-msg"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Pins -->
+      <div class="hidden" id="page-pins">
+        <div class="grid">
+          <div class="col">
+              <div class="card">
+                <div class="card-h">
+                  <div class="t">
+                    <h2><svg class="i"><use href="#i-chip"/></svg>Pins</h2>
+                    <p id="pins-sub">Which GPIO does each job</p>
+                  </div>
+                </div>
+                <div class="pins">
+                  <div class="wide"><label for="pin-psOn">ATX PS_ON# (green wire)</label><select id="pin-psOn"></select></div>
+                  <div class="wide"><label for="pin-sense">BC250 TPMS1 sense</label><select id="pin-sense"></select></div>
+                  <div><label for="pin-button">Button</label><select id="pin-button"></select></div>
+                  <div><label for="pin-buttonGnd">Button's other terminal</label><select id="pin-buttonGnd"></select></div>
+                  <div class="wide"><label for="pin-led">LED strip data</label><select id="pin-led"></select></div>
+                </div>
+                <div class="btnrow">
+                  <button class="btn" id="pins-btn">Save &amp; restart</button>
+                  <button class="linkbtn" id="pins-reset">Reset to defaults</button>
+                </div>
+                <div class="msg" id="pins-msg"></div>
+                <div class="hint" id="pins-hint">Saving restarts the switch and signs you out.</div>
+              </div>
+          </div>
+
+          <div class="col">
+            <div class="card">
+              <div class="card-h">
+                <div class="t">
+                  <h2><svg class="i"><use href="#i-term"/></svg>Before you change pins</h2>
+                  <p>Rewire first, then set the pins to match</p>
+                </div>
+              </div>
+              <div class="kv">
+                <div><span>PS_ON#</span><b>open-drain, LOW = PSU on</b></div>
+                <div><span>TPMS1 sense</span><b>analogue, ADC1 only</b></div>
+                <div><span>Button</span><b>input with pull-up</b></div>
+                <div><span>Other terminal</span><b>driven LOW, or GND</b></div>
+                <div><span>LED data</span><b>3.3 V WS2812 data</b></div>
+              </div>
+              <div class="hint">Move the wires with the PSU unplugged. A wrong PS_ON# or TPMS1 pin can switch the PSU
+                on or off unexpectedly, so check the wiring against the new pins before plugging it back in.</div>
+              <div class="hint">Saving restarts the switch, and a restart releases PS_ON#, which would cut a running
+                machine. That's why saving only works while the machine is off.</div>
+              <div class="hint">The lists only offer pins that are safe for each job on this chip: no flash,
+                strapping or serial pins. If saved pins ever stop being valid, the switch goes back to the defaults.</div>
             </div>
           </div>
         </div>
@@ -582,7 +664,7 @@
       creating = !info.passwordSet;
       $("pass-title").textContent = creating ? "Create a password" : "Welcome back";
       $("pass-sub").textContent = creating
-        ? "It protects the web UI on your network. At least 6 characters."
+        ? "This switch hasn't been set up yet. The password protects the web UI; at least 6 characters."
         : "Enter the password to open the BC250 Switch.";
       $("confirm-wrap").classList.toggle("hidden", !creating);
       $("pw").autocomplete = creating ? "new-password" : "current-password";
@@ -642,6 +724,7 @@
       stopTimers();
       refresh(true);
       pollLog();
+      pinsBusy = false;
       timers.push(setInterval(refresh, 1500));
       timers.push(setInterval(pollLog, 3000));
       timers.push(setInterval(renderLive, 1000));
@@ -650,11 +733,12 @@
 
     // --- Pages ---
     function route() {
-      const page = location.hash === "#leds" ? "leds" : "dash";
-      $("page-dash").classList.toggle("hidden", page !== "dash");
-      $("page-leds").classList.toggle("hidden", page !== "leds");
-      $("tab-dash").classList.toggle("on", page === "dash");
-      $("tab-leds").classList.toggle("on", page === "leds");
+      const page = { "#leds": "leds", "#pins": "pins" }[location.hash] || "dash";
+      for (const p of ["dash", "leds", "pins"]) {
+        $("page-" + p).classList.toggle("hidden", page !== p);
+        $("tab-" + p).classList.toggle("on", page === p);
+      }
+      if (page === "pins" && token && !pinsBusy) loadPins();
       clearInterval(ledTimer);
       ledTimer = null;
       if (page === "leds" && token) {
@@ -685,6 +769,7 @@
       renderNet(first === true);
       renderControllers();
       renderTiles();
+      renderPins();
       if (scanning || status.discovering) pollDevices();
     }
 
@@ -1001,7 +1086,26 @@
       standby: ["Glow", "blue", "The machine is off: showing the standby glow."],
       boot: ["Boot", "blue", "The machine is starting. The animation runs until the PC takes over."],
       idle: ["Idle", "", "Running, but the PC isn't sending."],
+      holdOff: ["Force off", "red", "The button is held: the machine is forced off when the bar fills."],
+      holdSetup: ["Setup hold", "blue", "The button is held: the switch changes setup mode when the bar fills."],
+      wake: ["Wake", "blue", "A controller is turning the machine on."],
+      shutdown: ["Power off", "", "The machine just powered off."],
+      bootFail: ["Boot failed", "red", "The board didn't come up within 10 s, so the PSU was switched off again."],
+      pairing: ["Pairing", "blue", "Looking for controllers to bind."],
+      starting: ["Starting", "amber", "PSU on, waiting for the board to come up."],
     };
+
+    // [key, name, what it shows], in the order the card lists them
+    const LED_SIGNALS = [
+      ["wake", "Controller wake", "A sweep across the bar when a controller turns the machine on"],
+      ["starting", "Starting", "Fills until the board comes up, then flashes full"],
+      ["shutdown", "Power off", "Fades out when the machine powers off, so you know it's down"],
+      ["bootFail", "Boot failed", "Slow pulses for a minute if the board never comes up"],
+      ["forceOff", "Force-off hold", "Fills while the button is held to force the machine off"],
+      ["setup", "Setup mode", "Fills while the button is held for setup mode, then a sweeping dot while in it"],
+      ["pairing", "Looking for controllers", "Breathes while a controller scan runs"],
+      ["wifi", "WiFi lost", "The end LEDs pulse while the router can't be reached"],
+    ];
 
     async function pollLeds() {
       try { leds = await api("/api/leds"); } catch (e) { return; }
@@ -1014,6 +1118,7 @@
         : s.stream.from ? ago(s.stream.ago) + " ago" : "Never";
       $("lf-fps").textContent = s.stream.active ? s.stream.fps + " fps" : "–";
       $("lf-pin").textContent = "GPIO" + leds.pin;
+      if (s.wifiWarning) $("led-hint").textContent += " The end LEDs show that the router can't be reached.";
       $("strip-sub").textContent = "WS2812 / NeoPixel, data on GPIO" + leds.pin;
       renderStrip(s.pixels, c.enabled);
 
@@ -1058,18 +1163,45 @@
       $("idle-scene").value = c.idleScene;
       $("idle-color").value = c.idleColor;
       $("led-net").checked = c.network;
+      $("led-sbri").value = c.standbyBrightness;
+      fillSignals(c.signals);
       showBrightness();
       showPickers();
     }
 
     function showBrightness() {
-      $("bri-val").textContent = Math.round($("led-bri").value / 255 * 100) + "%";
+      const pct = (v) => Math.round(v / 255 * 100) + "%";
+      $("bri-val").textContent = pct($("led-bri").value);
+      $("sbri-val").textContent = pct(Math.min(+$("led-sbri").value, +$("led-bri").value));
+    }
+
+    function fillSignals(sigs) {
+      const box = $("sigs");
+      box.replaceChildren();
+      for (const [key, name, what] of LED_SIGNALS) {
+        const sg = sigs[key];
+        if (!sg) continue;
+        const row = el("label");
+        const cb = el("input");
+        cb.type = "checkbox";
+        cb.id = "sig-on-" + key;
+        cb.checked = sg.on;
+        const nm = el("div", "nm");
+        nm.append(el("b", "", name), el("small", "", what));
+        const col = el("input");
+        col.type = "color";
+        col.id = "sig-color-" + key;
+        col.value = sg.color;
+        col.setAttribute("aria-label", name + " colour");
+        row.append(cb, nm, col);
+        box.appendChild(row);
+      }
     }
     function showPickers() {
       $("off-color").classList.toggle("hidden", $("off-scene").value !== "1");
       $("idle-color").classList.toggle("hidden", $("idle-scene").value !== "1");
     }
-    $("led-bri").oninput = showBrightness;
+    $("led-bri").oninput = $("led-sbri").oninput = showBrightness;
     $("off-scene").onchange = $("idle-scene").onchange = showPickers;
 
     async function saveLeds(body, btnId, msgId, okText) {
@@ -1090,8 +1222,17 @@
       if (!leds) return;
       const count = parseInt($("led-count").value, 10);
       if (!(count >= 1 && count <= leds.maxLeds)) return setMsg("strip-msg", "Between 1 and " + leds.maxLeds + " LEDs.", "err");
-      saveLeds({ enabled: $("led-en").checked, count, order: +$("led-order").value, brightness: +$("led-bri").value },
-               "strip-btn", "strip-msg", "Saved.");
+      saveLeds({ enabled: $("led-en").checked, count, order: +$("led-order").value, brightness: +$("led-bri").value,
+                 standbyBrightness: +$("led-sbri").value }, "strip-btn", "strip-msg", "Saved.");
+    };
+
+    $("sig-btn").onclick = () => {
+      const signals = {};
+      for (const [key] of LED_SIGNALS) {
+        if (!$("sig-on-" + key)) continue;
+        signals[key] = { on: $("sig-on-" + key).checked, color: $("sig-color-" + key).value };
+      }
+      saveLeds({ signals }, "sig-btn", "sig-msg", "Saved.");
     };
 
     $("beh-btn").onclick = () => saveLeds({
@@ -1111,6 +1252,69 @@
         setMsg("test-msg", e.message, "err");
       }
     };
+
+    // --- Pins ---
+    const PIN_ROLES = ["psOn", "sense", "button", "buttonGnd", "led"];
+    let pins = null;      // last /api/pins answer
+    let pinsBusy = false; // saved, waiting for the restart
+
+    async function loadPins() {
+      try { pins = await api("/api/pins"); } catch (e) { return; }
+      $("pins-sub").textContent = "Which GPIO does each job on the " + pins.board;
+      for (const role of PIN_ROLES) {
+        const sel = $("pin-" + role);
+        const list = role === "sense" ? pins.options.sense : pins.options.general;
+        const opts = list.map((g) => {
+          const o = el("option", "", "GPIO" + g + (pins.defaults[role] === g ? " (default)" : ""));
+          o.value = g;
+          return o;
+        });
+        if (role === "buttonGnd") {
+          const o = el("option", "", "GND (no pin)" + (pins.defaults[role] === -1 ? " (default)" : ""));
+          o.value = -1;
+          opts.unshift(o);
+        }
+        sel.replaceChildren(...opts);
+        sel.value = pins.pins[role];
+      }
+      renderPins();
+    }
+
+    // Saving restarts the switch, so it waits for the machine to be off.
+    function renderPins() {
+      if (!pins) return;
+      const off = !status || ["OFF", "SETUP"].includes(status.power.state);
+      $("pins-btn").disabled = $("pins-reset").disabled = pinsBusy || !off;
+      $("pins-hint").textContent = off ? "Saving restarts the switch and signs you out."
+        : "Switch the machine off to change pins: saving restarts the switch, which would cut its power.";
+    }
+
+    async function savePins(body, okText) {
+      setMsg("pins-msg", "");
+      if (!body.reset) {
+        const used = PIN_ROLES.map((r) => body[r]).filter((g) => g !== -1);
+        if (new Set(used).size !== used.length) return setMsg("pins-msg", "Each pin can only have one job.", "err");
+        if (PIN_ROLES.every((r) => body[r] === pins.pins[r])) return setMsg("pins-msg", "Nothing changed.", "");
+      }
+      try {
+        pinsBusy = true;
+        renderPins();
+        await api("/api/pins", "POST", body);
+        setMsg("pins-msg", okText, "ok");
+      } catch (e) {
+        pinsBusy = false;
+        renderPins();
+        setMsg("pins-msg", e.message, "err");
+      }
+    }
+
+    $("pins-btn").onclick = () => {
+      const body = {};
+      for (const role of PIN_ROLES) body[role] = +$("pin-" + role).value;
+      savePins(body, "Saved. The switch is restarting with the new pins; sign in again once it's back.");
+    };
+    $("pins-reset").onclick = () => savePins({ reset: true },
+      "Back to the defaults. The switch is restarting; sign in again once it's back.");
 
     // --- Setup finish ---
     $("finish-btn").onclick = async () => {
@@ -1134,11 +1338,9 @@
         info = await api("/api/info");
       } catch (e) {
         show("nopass");
-        $("screen-nopass").querySelector("h2").textContent = "Can't reach the switch";
         $("screen-nopass").querySelector(".muted").textContent = e.message;
         return;
       }
-      if (!info.passwordSet && info.mode !== "setup") return show("nopass");
       token = info.passwordSet ? load("bc250-token") : null;
       if (token) startMain(); else showPassScreen();
     })();

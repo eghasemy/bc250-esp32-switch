@@ -18,7 +18,9 @@ button — plus optional "turn on when I pick up my controller" via Bluetooth.
 - **LED bar** (optional): drives a WS2812 strip that mirrors Steam's Game Mode LED
   settings from the PC (WLED-compatible, for
   [steamos-led-wled](https://github.com/rpf16rj/steamos-led-wled)), with boot and
-  standby lighting that follows the power state.
+  standby lighting that follows the power state, and status lights for what the switch
+  itself is doing (button holds, controller wake, boot progress, shutdown, failures).
+- **Configurable pins**: every GPIO can be moved from the web UI.
 
 ## Board targets
 
@@ -38,6 +40,9 @@ working.
 The ESP32 module is permanently powered from the ATX connector's **5 V standby**,
 so it runs whether the machine is on or off. Share a common ground between the ESP,
 the PSU, and the board.
+
+The tables below are the default pins. Each one can be moved to another GPIO from the
+web UI's **Pins** tab (see [Web UI](#web-ui)).
 
 ### ESP32-WROOM-32 wiring (default)
 
@@ -134,6 +139,13 @@ binding a controller that is on doesn't power the machine up.
 
 ## Web UI
 
+**First-time setup**: a switch that has never been set up has no router to join, so it
+brings up the open network **`BC250 Switch Setup`** on its own. Join it, open
+`http://192.168.4.1` (phones usually show it as a sign-in page) and create a password,
+then set the router, pins and the rest. No button hold is needed, and the switch works as
+a power switch throughout. Until a password exists, whoever reaches the switch first can
+set one, so do this soon after first power-up.
+
 In normal operation the switch joins your router and serves the web UI at
 `http://bc250-switch.local` (or its IP address, shown in the serial log and the UI):
 
@@ -145,6 +157,11 @@ In normal operation the switch joins your router and serves the web UI at
   controller* runs a 30 s Bluetooth scan to pick from, or takes a MAC address.
 - **WiFi**: the router to join (2.4 GHz only). Saving reconnects right away.
 - **Password** change, and the last 40 events.
+- **Pins** (its own tab): which GPIO does each job. Only pins that are safe for the job on that chip are
+  offered: no flash, strapping or serial pins, and an ADC1 pin for `TPMS1`. The button's
+  second terminal can also go straight to GND. Saving restarts the switch, so it's only
+  allowed while the machine is off (a restart releases `PS_ON#`). Move the wires with the
+  PSU unplugged first: a wrong `PS_ON#` or `TPMS1` pin can switch the PSU unexpectedly.
 
 Everything needs the password. Sessions last until you sign out, 7 days of inactivity,
 or a restart of the switch.
@@ -173,16 +190,79 @@ in the UI limits that.
 
 1. In the web UI, open **LED bar**, tick *Drive the LED bar*, set the LED count and save.
    *Light up for 5 s* checks the wiring and colour order.
-2. On the BC250, install steamos-led-wled. Give the installer the switch's IP address
-   (shown on the LED bar page; reserve it in your router), UDP port `21324` and the LED
-   count. Answer **no** to the WLED boot preset: the switch has its own boot animation.
+2. On the BC250, install the companion, steamos-led-wled (see below).
 
-**What it shows**, in priority order: a test colour; dark, if the PC switched the bar
+### Installing the companion
+
+steamos-led-wled runs on the BC250, the machine that runs Steam. It has two parts: a
+small kernel module (`leds-valve-shim`) that exposes Steam's LED state, and a systemd
+service that forwards it to the switch.
+
+```bash
+git clone https://github.com/rpf16rj/steamos-led-wled.git
+cd steamos-led-wled
+sudo ./install.sh
+```
+
+The installer asks a few questions:
+
+- **WLED IP**: the switch's IP address, shown on the LED bar page. Reserve it in your
+  router so it doesn't change. If auto-discovery doesn't find the switch, type the
+  address in.
+- **Port**: `21324`.
+- **LED count**: your strip's LED count. The bridge supports up to 17.
+- **WLED boot preset**: answer **no**. The switch has its own boot and standby lights,
+  and doesn't implement the endpoint this step writes to.
+
+**CachyOS** needs two extra steps, because its kernels are built with Clang:
+
+```bash
+# "clang" in this output means the module has to be built with LLVM=1
+cat /proc/version
+
+# The installer would fetch `linux-headers`, which is for the stock Arch kernel.
+# Install the headers for the kernel you're running, and the Clang toolchain:
+sudo pacman -S --needed base-devel clang llvm lld \
+  "$(pacman -Qoq /usr/lib/modules/$(uname -r)/vmlinuz)-headers"
+
+# Pass LLVM=1 through to make
+sudo LLVM=1 ./install.sh
+```
+
+Without `LLVM=1`, the module build uses gcc and fails with unknown-option errors. To
+build the module by hand, run `make -C leds-valve-shim LLVM=1`; the installer then
+uses that build. If `/proc/version` shows gcc, leave out `LLVM=1`.
+
+The module has to match the running kernel, so re-run the installer after a kernel
+update. It notices the mismatch and rebuilds. Check the bridge with
+`sudo systemctl status steamos-led-wled`; follow its log with
+`sudo journalctl -u steamos-led-wled -f`.
+
+### What the bar shows
+
+In priority order: a test colour; dark, if the PC switched the bar
 off (until it switches it back on or the machine powers on or off); the PC's frames,
 while they keep coming (each packet holds for its timeout); otherwise a local scene —
 off or a standby glow while the machine is off, a Steam-blue boot animation while it
 starts until the PC takes over, and off, a colour or a rainbow while it runs without
 the PC sending. Changes crossfade.
+
+**Status lights** show what the switch itself is doing, over the PC's frames and the
+scenes. Each can be turned off or recoloured on the LED bar page:
+
+| Light | When |
+|-------|------|
+| Controller wake | A sweep across the bar as a controller turns the machine on |
+| Starting | Fills while waiting for the board to come up, then flashes full |
+| Power off | Fades out once the machine is off, so you know it's down |
+| Boot failed | Slow red pulses for a minute when the board never came up |
+| Force-off hold | Fills while the button is held, forcing the machine off when full |
+| Setup mode | Fills while the button is held for setup mode; a sweeping dot while in it |
+| Looking for controllers | Breathes while a controller scan from the web UI runs |
+| WiFi lost | The end LEDs pulse while the router can't be reached (over the local scenes only) |
+
+Holds only show once they're longer than a tap. While the machine is off (or in setup
+mode) the bar is capped at a separate, lower **standby brightness**.
 
 The WLED part covers the realtime UDP protocols (WARLS, DRGB, DRGBW, DNRGB) and the
 HTTP calls the bridge makes (`/json/info`, `/json/state`, `/win&T=`). These are open on
@@ -191,9 +271,9 @@ enabled with *Let the PC control the bar over the network* ticked.
 
 ## Setup mode
 
-The first password can only be created in setup mode, which needs physical access: hold
-the button ≥ 8 s while off. It never starts on its own, even on first use — without a
-password the button still works as a plain power switch.
+First-time setup doesn't need setup mode (see [Web UI](#web-ui)). Setup mode brings up
+the switch's own network on demand, with the PSU held off: hold the button ≥ 8 s while
+off. It never starts on its own.
 
 1. Connect to the open WiFi network **`BC250 Switch Setup`** and open `http://192.168.4.1`.
 2. Create a password (or sign in, if one is set).
