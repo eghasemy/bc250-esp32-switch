@@ -245,14 +245,11 @@
   </svg>
 
   <div class="wrap">
-    <!-- No password yet and not in setup mode -->
+    <!-- The switch didn't answer -->
     <div class="card auth hidden" id="screen-nopass">
       <div class="logo"><svg class="i"><use href="#i-pad"/></svg></div>
-      <h2>Not set up yet</h2>
-      <div class="muted">
-        With the machine off, hold the power button for 8 seconds. The switch restarts into
-        setup mode: join the <b>BC250 Switch Setup</b> WiFi network and create a password there.
-      </div>
+      <h2>Can't reach the switch</h2>
+      <div class="muted"></div>
     </div>
 
     <!-- Create password / sign in -->
@@ -284,6 +281,7 @@
       <nav class="tabs">
         <a href="#" id="tab-dash"><svg class="i"><use href="#i-grid"/></svg>Dashboard</a>
         <a href="#leds" id="tab-leds"><svg class="i"><use href="#i-led"/></svg>LED bar</a>
+        <a href="#pins" id="tab-pins"><svg class="i"><use href="#i-chip"/></svg>Pins</a>
       </nav>
 
       <div class="banner hidden" id="setup-banner">
@@ -412,30 +410,6 @@
             <button class="btn full" id="chpw-btn">Change password</button>
             <div class="msg" id="chpw-msg"></div>
           </div>
-
-          <div class="card">
-            <div class="card-h">
-              <div class="t">
-                <h2><svg class="i"><use href="#i-chip"/></svg>Pins</h2>
-                <p id="pins-sub">Which GPIO does each job</p>
-              </div>
-            </div>
-            <div class="pins">
-              <div class="wide"><label for="pin-psOn">ATX PS_ON# (green wire)</label><select id="pin-psOn"></select></div>
-              <div class="wide"><label for="pin-sense">BC250 TPMS1 sense</label><select id="pin-sense"></select></div>
-              <div><label for="pin-button">Button</label><select id="pin-button"></select></div>
-              <div><label for="pin-buttonGnd">Button's other terminal</label><select id="pin-buttonGnd"></select></div>
-              <div class="wide"><label for="pin-led">LED strip data</label><select id="pin-led"></select></div>
-            </div>
-            <div class="btnrow">
-              <button class="btn" id="pins-btn">Save &amp; restart</button>
-              <button class="linkbtn" id="pins-reset">Reset to defaults</button>
-            </div>
-            <div class="msg" id="pins-msg"></div>
-            <div class="hint" id="pins-hint">Move the wires with the PSU unplugged, then set the pins to match: a wrong
-              PS_ON# or TPMS1 pin can switch the PSU on or off unexpectedly. Saving restarts the switch, which signs
-              you out, so it's only possible while the machine is off.</div>
-          </div>
         </div>
 
         <!-- Log -->
@@ -563,6 +537,58 @@
           </div>
         </div>
       </div>
+      <!-- Pins -->
+      <div class="hidden" id="page-pins">
+        <div class="grid">
+          <div class="col">
+              <div class="card">
+                <div class="card-h">
+                  <div class="t">
+                    <h2><svg class="i"><use href="#i-chip"/></svg>Pins</h2>
+                    <p id="pins-sub">Which GPIO does each job</p>
+                  </div>
+                </div>
+                <div class="pins">
+                  <div class="wide"><label for="pin-psOn">ATX PS_ON# (green wire)</label><select id="pin-psOn"></select></div>
+                  <div class="wide"><label for="pin-sense">BC250 TPMS1 sense</label><select id="pin-sense"></select></div>
+                  <div><label for="pin-button">Button</label><select id="pin-button"></select></div>
+                  <div><label for="pin-buttonGnd">Button's other terminal</label><select id="pin-buttonGnd"></select></div>
+                  <div class="wide"><label for="pin-led">LED strip data</label><select id="pin-led"></select></div>
+                </div>
+                <div class="btnrow">
+                  <button class="btn" id="pins-btn">Save &amp; restart</button>
+                  <button class="linkbtn" id="pins-reset">Reset to defaults</button>
+                </div>
+                <div class="msg" id="pins-msg"></div>
+                <div class="hint" id="pins-hint">Saving restarts the switch and signs you out.</div>
+              </div>
+          </div>
+
+          <div class="col">
+            <div class="card">
+              <div class="card-h">
+                <div class="t">
+                  <h2><svg class="i"><use href="#i-term"/></svg>Before you change pins</h2>
+                  <p>Rewire first, then set the pins to match</p>
+                </div>
+              </div>
+              <div class="kv">
+                <div><span>PS_ON#</span><b>open-drain, LOW = PSU on</b></div>
+                <div><span>TPMS1 sense</span><b>analogue, ADC1 only</b></div>
+                <div><span>Button</span><b>input with pull-up</b></div>
+                <div><span>Other terminal</span><b>driven LOW, or GND</b></div>
+                <div><span>LED data</span><b>3.3 V WS2812 data</b></div>
+              </div>
+              <div class="hint">Move the wires with the PSU unplugged. A wrong PS_ON# or TPMS1 pin can switch the PSU
+                on or off unexpectedly, so check the wiring against the new pins before plugging it back in.</div>
+              <div class="hint">Saving restarts the switch, and a restart releases PS_ON#, which would cut a running
+                machine. That's why saving only works while the machine is off.</div>
+              <div class="hint">The lists only offer pins that are safe for each job on this chip: no flash,
+                strapping or serial pins. If saved pins ever stop being valid, the switch goes back to the defaults.</div>
+            </div>
+          </div>
+        </div>
+      </div>
       <footer id="footer"></footer>
     </div>
   </div>
@@ -638,7 +664,7 @@
       creating = !info.passwordSet;
       $("pass-title").textContent = creating ? "Create a password" : "Welcome back";
       $("pass-sub").textContent = creating
-        ? "It protects the web UI on your network. At least 6 characters."
+        ? "This switch hasn't been set up yet. The password protects the web UI; at least 6 characters."
         : "Enter the password to open the BC250 Switch.";
       $("confirm-wrap").classList.toggle("hidden", !creating);
       $("pw").autocomplete = creating ? "new-password" : "current-password";
@@ -699,7 +725,6 @@
       refresh(true);
       pollLog();
       pinsBusy = false;
-      loadPins();
       timers.push(setInterval(refresh, 1500));
       timers.push(setInterval(pollLog, 3000));
       timers.push(setInterval(renderLive, 1000));
@@ -708,11 +733,12 @@
 
     // --- Pages ---
     function route() {
-      const page = location.hash === "#leds" ? "leds" : "dash";
-      $("page-dash").classList.toggle("hidden", page !== "dash");
-      $("page-leds").classList.toggle("hidden", page !== "leds");
-      $("tab-dash").classList.toggle("on", page === "dash");
-      $("tab-leds").classList.toggle("on", page === "leds");
+      const page = { "#leds": "leds", "#pins": "pins" }[location.hash] || "dash";
+      for (const p of ["dash", "leds", "pins"]) {
+        $("page-" + p).classList.toggle("hidden", page !== p);
+        $("tab-" + p).classList.toggle("on", page === p);
+      }
+      if (page === "pins" && token && !pinsBusy) loadPins();
       clearInterval(ledTimer);
       ledTimer = null;
       if (page === "leds" && token) {
@@ -1259,7 +1285,8 @@
       if (!pins) return;
       const off = !status || ["OFF", "SETUP"].includes(status.power.state);
       $("pins-btn").disabled = $("pins-reset").disabled = pinsBusy || !off;
-      $("pins-btn").title = off ? "" : "Switch the machine off first";
+      $("pins-hint").textContent = off ? "Saving restarts the switch and signs you out."
+        : "Switch the machine off to change pins: saving restarts the switch, which would cut its power.";
     }
 
     async function savePins(body, okText) {
@@ -1311,11 +1338,9 @@
         info = await api("/api/info");
       } catch (e) {
         show("nopass");
-        $("screen-nopass").querySelector("h2").textContent = "Can't reach the switch";
         $("screen-nopass").querySelector(".muted").textContent = e.message;
         return;
       }
-      if (!info.passwordSet && info.mode !== "setup") return show("nopass");
       token = info.passwordSet ? load("bc250-token") : null;
       if (token) startMain(); else showPassScreen();
     })();

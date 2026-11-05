@@ -192,13 +192,9 @@ static void handlePassword(AsyncWebServerRequest *req, JsonVariant &json) {
     return;
   }
   if (!hasPassword()) {
-    // The first password can only be created in setup mode, which needs the
-    // physical 8 s button hold. Otherwise anyone on the (possibly open
-    // fallback) network could claim the device.
-    if (!g_setupMode) {
-      sendJsonError(req, 403, "hold the button 8 s while off to set a password");
-      return;
-    }
+    // A switch that has never been set up can be claimed by whoever reaches it
+    // first. With no password there is no router either, so that means being in
+    // range of its own open network.
   } else {
     Session *s = findSession(req);
     String current = o["current"] | "";

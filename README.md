@@ -42,7 +42,7 @@ so it runs whether the machine is on or off. Share a common ground between the E
 the PSU, and the board.
 
 The tables below are the default pins. Each one can be moved to another GPIO from the
-web UI's **Pins** card (see [Web UI](#web-ui)).
+web UI's **Pins** tab (see [Web UI](#web-ui)).
 
 ### ESP32-WROOM-32 wiring (default)
 
@@ -139,6 +139,13 @@ binding a controller that is on doesn't power the machine up.
 
 ## Web UI
 
+**First-time setup**: a switch that has never been set up has no router to join, so it
+brings up the open network **`BC250 Switch Setup`** on its own. Join it, open
+`http://192.168.4.1` (phones usually show it as a sign-in page) and create a password,
+then set the router, pins and the rest. No button hold is needed, and the switch works as
+a power switch throughout. Until a password exists, whoever reaches the switch first can
+set one, so do this soon after first power-up.
+
 In normal operation the switch joins your router and serves the web UI at
 `http://bc250-switch.local` (or its IP address, shown in the serial log and the UI):
 
@@ -150,7 +157,7 @@ In normal operation the switch joins your router and serves the web UI at
   controller* runs a 30 s Bluetooth scan to pick from, or takes a MAC address.
 - **WiFi**: the router to join (2.4 GHz only). Saving reconnects right away.
 - **Password** change, and the last 40 events.
-- **Pins**: which GPIO does each job. Only pins that are safe for the job on that chip are
+- **Pins** (its own tab): which GPIO does each job. Only pins that are safe for the job on that chip are
   offered: no flash, strapping or serial pins, and an ADC1 pin for `TPMS1`. The button's
   second terminal can also go straight to GND. Saving restarts the switch, so it's only
   allowed while the machine is off (a restart releases `PS_ON#`). Move the wires with the
@@ -218,9 +225,9 @@ enabled with *Let the PC control the bar over the network* ticked.
 
 ## Setup mode
 
-The first password can only be created in setup mode, which needs physical access: hold
-the button ≥ 8 s while off. It never starts on its own, even on first use — without a
-password the button still works as a plain power switch.
+First-time setup doesn't need setup mode (see [Web UI](#web-ui)). Setup mode brings up
+the switch's own network on demand, with the PSU held off: hold the button ≥ 8 s while
+off. It never starts on its own.
 
 1. Connect to the open WiFi network **`BC250 Switch Setup`** and open `http://192.168.4.1`.
 2. Create a password (or sign in, if one is set).
