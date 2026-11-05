@@ -190,11 +190,57 @@ in the UI limits that.
 
 1. In the web UI, open **LED bar**, tick *Drive the LED bar*, set the LED count and save.
    *Light up for 5 s* checks the wiring and colour order.
-2. On the BC250, install steamos-led-wled. Give the installer the switch's IP address
-   (shown on the LED bar page; reserve it in your router), UDP port `21324` and the LED
-   count. Answer **no** to the WLED boot preset: the switch has its own boot animation.
+2. On the BC250, install the companion, steamos-led-wled (see below).
 
-**What it shows**, in priority order: a test colour; dark, if the PC switched the bar
+### Installing the companion
+
+steamos-led-wled runs on the BC250, the machine that runs Steam. It has two parts: a
+small kernel module (`leds-valve-shim`) that exposes Steam's LED state, and a systemd
+service that forwards it to the switch.
+
+```bash
+git clone https://github.com/rpf16rj/steamos-led-wled.git
+cd steamos-led-wled
+sudo ./install.sh
+```
+
+The installer asks a few questions:
+
+- **WLED IP**: the switch's IP address, shown on the LED bar page. Reserve it in your
+  router so it doesn't change. If auto-discovery doesn't find the switch, type the
+  address in.
+- **Port**: `21324`.
+- **LED count**: your strip's LED count. The bridge supports up to 17.
+- **WLED boot preset**: answer **no**. The switch has its own boot and standby lights,
+  and doesn't implement the endpoint this step writes to.
+
+**CachyOS** needs two extra steps, because its kernels are built with Clang:
+
+```bash
+# "clang" in this output means the module has to be built with LLVM=1
+cat /proc/version
+
+# The installer would fetch `linux-headers`, which is for the stock Arch kernel.
+# Install the headers for the kernel you're running, and the Clang toolchain:
+sudo pacman -S --needed base-devel clang llvm lld \
+  "$(pacman -Qoq /usr/lib/modules/$(uname -r)/vmlinuz)-headers"
+
+# Pass LLVM=1 through to make
+sudo LLVM=1 ./install.sh
+```
+
+Without `LLVM=1`, the module build uses gcc and fails with unknown-option errors. To
+build the module by hand, run `make -C leds-valve-shim LLVM=1`; the installer then
+uses that build. If `/proc/version` shows gcc, leave out `LLVM=1`.
+
+The module has to match the running kernel, so re-run the installer after a kernel
+update. It notices the mismatch and rebuilds. Check the bridge with
+`sudo systemctl status steamos-led-wled`; follow its log with
+`sudo journalctl -u steamos-led-wled -f`.
+
+### What the bar shows
+
+In priority order: a test colour; dark, if the PC switched the bar
 off (until it switches it back on or the machine powers on or off); the PC's frames,
 while they keep coming (each packet holds for its timeout); otherwise a local scene —
 off or a standby glow while the machine is off, a Steam-blue boot animation while it
